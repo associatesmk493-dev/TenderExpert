@@ -1,0 +1,4 @@
+project_id = "iirrndbzniiotzosemvh"
+
+[functions.tenderexpert-ai]
+verify_jwt = true

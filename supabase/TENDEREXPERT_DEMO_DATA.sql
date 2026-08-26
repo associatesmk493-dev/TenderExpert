@@ -1,0 +1,62 @@
+-- TenderExpert realistic demo data. Run after TENDEREXPERT_CRM_COMPLETE_SETUP.sql.
+-- Safe to run multiple times: fixed UUIDs + ON CONFLICT updates.
+
+insert into public.b2g_leads
+(id,organization_name,contact_name,phone,email,website,industry,state,city,pipeline,stage,service_interest,source,heat,ai_score,ai_summary,next_best_action,proposal_value,expected_revenue,probability,expected_close_date,next_follow_up_at,last_contacted_at,notes)
+values
+('10000000-0000-0000-0000-000000000001','AquaFlow Systems Pvt. Ltd.','Rajiv Mehta','9876501001','rajiv@aquaflow.example','https://aquaflow.example','Water & Wastewater','Maharashtra','Pune','brand_approval','documents_received',array['Brand / Product Approval','Vendor Registration'],'referral','hot',88,'Strong product readiness, decision-maker engaged and documents substantially complete.','Review remaining test certificates and schedule submission meeting.',850000,680000,80,current_date+25,now()+interval '2 hours',now()-interval '1 day','Seeking product approval across multiple state water boards.'),
+('10000000-0000-0000-0000-000000000002','Medivance Healthcare Ltd.','Dr. Neha Sharma','9876501002','neha@medivance.example',null,'Healthcare','Delhi','New Delhi','brand_approval','meeting_scheduled',array['Brand / Product Approval','Government Market Entry'],'website','warm',72,'Good fit with central procurement opportunity; regulatory documents need assessment.','Conduct government readiness and documentation gap assessment.',525000,315000,60,current_date+40,now()+interval '1 day',now()-interval '3 days','Medical equipment manufacturer entering government procurement.'),
+('10000000-0000-0000-0000-000000000003','Shakti Industrial Pumps','Vikram Singh','9876501003','vikram@shaktipumps.example',null,'Manufacturing','Gujarat','Ahmedabad','brand_approval','proposal_submitted',array['Brand / Product Approval','Technical Presentation'],'email','hot',91,'Proposal shared; urgent requirement linked to an upcoming departmental procurement.','Follow up on commercial approval and advance payment.',1200000,960000,80,current_date+15,now()-interval '3 hours',now()-interval '2 days','Industrial pump approvals and technical presentations.'),
+('10000000-0000-0000-0000-000000000004','NexGrid Technologies Pvt. Ltd.','Arun Iyer','9876501004','arun@nexgrid.example','https://nexgrid.example','Technology','Karnataka','Bengaluru','government_business_development','business_assessment',array['Government Business Development','Government Market Entry','Tender Intelligence'],'event','warm',68,'Technology is relevant to smart-city programs; government credentials are limited.','Complete government readiness assessment and target-account mapping.',1800000,720000,40,current_date+60,now()+interval '2 days',now()-interval '5 days','IoT and smart infrastructure solutions.'),
+('10000000-0000-0000-0000-000000000005','EcoBuild Infra Projects','Sanjay Kulkarni','9876501005','sanjay@ecobuild.example',null,'Infrastructure','Madhya Pradesh','Indore','government_business_development','technical_presentation',array['Government Business Development','Technical Presentation','BOQ & Specification Support'],'referral','hot',84,'Active departmental engagement and validated technical requirement.','Finalize technical presentation and identify pilot opportunity.',2400000,1680000,70,current_date+35,now()+interval '5 hours',now()-interval '1 day','Sustainable infrastructure and municipal projects.'),
+('10000000-0000-0000-0000-000000000006','BioPure Treatment Solutions','Kavita Rao','9876501006','kavita@biopure.example',null,'Water & Wastewater','Telangana','Hyderabad','government_business_development','order_conversion',array['Government Business Development','Opportunity Identification','Tender Support'],'existing_customer','hot',94,'Government business engagement converted successfully.','Continue account growth and identify the next opportunity.',3600000,3600000,100,current_date-10,null,now()-interval '8 hours','Annual government business development engagement converted.'),
+('10000000-0000-0000-0000-000000000007','SecureWave Networks','Mohit Bansal','9876501007','mohit@securewave.example',null,'Technology','Haryana','Gurugram','tender_consultancy','tender_evaluation',array['Tender Consultancy','BOQ & Specification Support'],'whatsapp','warm',66,'Tender fit is positive but OEM authorization and turnover criteria need confirmation.','Complete eligibility matrix and obtain OEM authorization.',450000,225000,50,current_date+18,now()+interval '4 hours',now()-interval '2 days','Cybersecurity tender for a state agency.'),
+('10000000-0000-0000-0000-000000000008','Prime Engineering Consortium','Amit Jain','9876501008','amit@primeengineering.example',null,'Engineering','Rajasthan','Jaipur','tender_consultancy','bid_submission',array['Tender Consultancy','BOQ & Specification Support','Tender Intelligence'],'tender_portal','hot',89,'Bid is in final submission stage; all major compliance items completed.','Perform final bid review and submit before portal rush.',950000,855000,90,current_date+8,now()+interval '1 hour',now()-interval '5 hours','Consultancy for public works equipment tender.'),
+('10000000-0000-0000-0000-000000000009','Zenith Medical Devices','Pooja Nair','9876501009','pooja@zenithmedical.example',null,'Healthcare','Tamil Nadu','Chennai','tender_consultancy','order_received',array['Tender Consultancy','Vendor Registration'],'referral','warm',96,'Tender converted and government order received.','Complete delivery handover and success-fee collection.',675000,675000,100,current_date-5,null,now()-interval '4 days','Government diagnostic equipment order received.')
+on conflict(id) do update set
+organization_name=excluded.organization_name,contact_name=excluded.contact_name,phone=excluded.phone,email=excluded.email,
+pipeline=excluded.pipeline,stage=excluded.stage,heat=excluded.heat,ai_score=excluded.ai_score,ai_summary=excluded.ai_summary,
+next_best_action=excluded.next_best_action,proposal_value=excluded.proposal_value,expected_revenue=excluded.expected_revenue,
+probability=excluded.probability,next_follow_up_at=excluded.next_follow_up_at,notes=excluded.notes;
+
+insert into public.b2g_activities(id,lead_id,activity_type,subject,description,created_at) values
+('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','meeting','Documentation review','Reviewed company profile, test certificates and product catalogue.',now()-interval '3 days'),
+('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000003','proposal','Commercial proposal shared','Proposal shared for product approval and technical presentation support.',now()-interval '2 days'),
+('20000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000005','meeting','Department presentation planning','Agreed presentation flow and identified technical decision makers.',now()-interval '1 day'),
+('20000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000008','call','Final bid checklist','Confirmed EMD, authorization, BOQ and signed annexures.',now()-interval '5 hours')
+on conflict(id) do nothing;
+
+insert into public.b2g_projects(id,lead_id,project_name,scope,payment_model,contract_value,gst_rate,start_date,target_completion_date,status) values
+('30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','Water Board Product Approval','Documentation, submission and approval coordination','80_20',850000,18,current_date-10,current_date+60,'active'),
+('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000006','Government Business Development Retainer','Opportunity mapping, presentations and tender support','monthly_retainer',3600000,18,current_date-30,current_date+335,'active')
+on conflict(id) do update set contract_value=excluded.contract_value,status=excluded.status;
+
+insert into public.b2g_payment_milestones(id,project_id,milestone_name,sequence_no,percentage,amount,gst_amount,due_date,amount_received,received_at,status,invoice_number) values
+('40000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','Advance',1,80,680000,122400,current_date-8,802400,now()-interval '8 days','paid','TE/26-27/001'),
+('40000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-000000000001','Approval completion',2,20,170000,30600,current_date+55,0,null,'not_due',null),
+('40000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000002','Month 1 Retainer',1,null,300000,54000,current_date-25,354000,now()-interval '24 days','paid','TE/26-27/002'),
+('40000000-0000-0000-0000-000000000004','30000000-0000-0000-0000-000000000002','Month 2 Retainer',2,null,300000,54000,current_date+5,150000,now()-interval '2 days','partially_paid','TE/26-27/006')
+on conflict(id) do update set amount_received=excluded.amount_received,status=excluded.status,received_at=excluded.received_at;
+
+insert into public.b2g_tasks(id,lead_id,title,task_type,priority,due_at,assigned_to,completed_at) values
+('50000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000003','Follow up for proposal approval','follow_up','urgent',now()-interval '3 hours',null,null),
+('50000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000008','Final tender submission review','tender','urgent',now()+interval '1 hour',null,null),
+('50000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000005','Prepare technical presentation','meeting','high',now()+interval '5 hours',null,null),
+('50000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000002','Government readiness assessment','document','medium',now()+interval '1 day',null,null)
+on conflict(id) do update set due_at=excluded.due_at,completed_at=null;
+
+insert into public.tender_opportunities(id,lead_id,tender_title,tender_number,authority_name,department,state,estimated_value,emd_amount,submission_deadline,go_no_go,match_score,ai_analysis,status) values
+('60000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000007','State Data Centre Network Security Upgrade','SDC/SEC/2026/118','State IT Department','Data Centre Division','Haryana',48500000,970000,now()+interval '12 days','pending',74,'Technical fit is strong. Verify OEM authorization, turnover threshold and three similar-work credentials.','identified'),
+('60000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000008','Supply of Public Works Testing Equipment','PWD/EQP/2026/44','Public Works Department','Quality Control','Rajasthan',27500000,550000,now()+interval '2 days','go',91,'High match. Technical compliance and past performance criteria are satisfied. Final commercial review pending.','evaluation'),
+('60000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000009','Diagnostic Equipment Rate Contract','DME/RC/2026/09','Directorate of Medical Education','Procurement','Tamil Nadu',62000000,1240000,now()-interval '5 days','go',86,'Bid submitted and technically qualified. Monitor commercial opening and clarification notices.','result_awaited')
+on conflict(id) do update set submission_deadline=excluded.submission_deadline,go_no_go=excluded.go_no_go,match_score=excluded.match_score,status=excluded.status;
+
+insert into public.b2g_proposals(id,lead_id,proposal_number,subject,scope,commercial_terms,payment_model,subtotal,gst_rate,status,valid_until,sent_at) values
+('70000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000003','TE-DEMO-001','Product Approval & Technical Presentation Proposal','Product approval documentation, authority submission, follow-up and technical presentation support.','80% advance and 20% on completion. GST extra.','80_20',1200000,18,'sent',current_date+15,now()-interval '2 days'),
+('70000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000005','TE-DEMO-002','Government Business Development Engagement','Department mapping, technical presentations, opportunity identification and tender support.','70% advance and 30% on agreed milestone. GST extra.','70_30',2400000,18,'draft',current_date+20,null)
+on conflict(id) do update set status=excluded.status,subtotal=excluded.subtotal;
+
+select 'TenderExpert demo data installed' as result,
+  (select count(*) from public.b2g_leads where id::text like '10000000-%') as demo_leads,
+  (select count(*) from public.b2g_projects where id::text like '30000000-%') as demo_projects,
+  (select count(*) from public.tender_opportunities where id::text like '60000000-%') as demo_tenders;

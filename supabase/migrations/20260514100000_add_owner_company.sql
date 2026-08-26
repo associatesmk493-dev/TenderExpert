@@ -1,0 +1,3 @@
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS owner_name text,
+  ADD COLUMN IF NOT EXISTS company text;

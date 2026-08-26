@@ -1,0 +1,5 @@
+ALTER TABLE public.lead_orders
+  ADD COLUMN IF NOT EXISTS region TEXT,
+  ADD COLUMN IF NOT EXISTS industry TEXT,
+  ADD COLUMN IF NOT EXISTS business_type TEXT,
+  ADD COLUMN IF NOT EXISTS lead_type TEXT;
