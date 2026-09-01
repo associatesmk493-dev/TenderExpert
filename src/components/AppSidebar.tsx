@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, UserCircle, Heart, ContactRound, WalletCards, Download, ClipboardList, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Users, UserCircle, Heart, ContactRound, WalletCards, Download, ClipboardList, Megaphone, TrendingUp, BadgeIndianRupee } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -23,9 +23,11 @@ export function AppSidebar() {
 
   const mainItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+    { title: 'Growth Engine', url: '/growth', icon: TrendingUp },
     { title: 'Leads', url: '/leads', icon: Users },
     { title: 'Clients', url: '/clients', icon: ContactRound },
     { title: 'Tasks & Reminders', url: '/tasks', icon: ClipboardList },
+    { title: 'Collection Dashboard', url: '/collection-dashboard', icon: BadgeIndianRupee },
     { title: 'Payments', url: '/orders', icon: WalletCards },
     { title: 'Campaigns', url: '/campaigns', icon: Megaphone },
   ];

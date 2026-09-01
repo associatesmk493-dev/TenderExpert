@@ -30,6 +30,7 @@ const Leads        = lazyWithRetry(() => import("@/pages/Leads"));
 const LeadDetail   = lazyWithRetry(() => import("@/pages/LeadDetail"));
 const ClientProfile = lazyWithRetry(() => import("@/pages/ClientProfile"));
 const ClientsView   = lazyWithRetry(() => import("@/pages/ClientsView"));
+const CompanyDetail = lazyWithRetry(() => import("@/pages/CompanyDetail"));
 const AddLead      = lazyWithRetry(() => import("@/pages/AddLead"));
 const ImportLeads  = lazyWithRetry(() => import("@/pages/ImportLeads"));
 const Attendance   = lazyWithRetry(() => import("@/pages/Attendance"));
@@ -40,6 +41,8 @@ const InstallApp   = lazyWithRetry(() => import("@/pages/InstallApp"));
 const Profile      = lazyWithRetry(() => import("@/pages/Profile"));
 const BusinessOperations = lazyWithRetry(() => import("@/pages/BusinessOperations"));
 const AIAssistant = lazyWithRetry(() => import("@/pages/AIAssistant"));
+const GrowthEngine = lazyWithRetry(() => import("@/pages/GrowthEngine"));
+const CollectionDashboard = lazyWithRetry(() => import("@/pages/CollectionDashboard"));
 const NotFound     = lazyWithRetry(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -81,6 +84,7 @@ const App = () => (
                   <Route path="/leads/:id"  element={<LeadDetail />} />
                   <Route path="/leads/:id/profile" element={<ClientProfile />} />
                   <Route path="/clients" element={<ClientsView />} />
+                  <Route path="/clients/:id" element={<CompanyDetail />} />
                   <Route path="/campaigns"   element={<Campaigns />} />
                   <Route path="/import"     element={<ImportLeads />} />
                   <Route path="/attendance" element={<Attendance />} />
@@ -88,6 +92,8 @@ const App = () => (
                   <Route path="/collections" element={<Navigate to="/orders" replace />} />
                   <Route path="/margin"      element={<Navigate to="/" replace />} />
                   <Route path="/assistant"   element={<AIAssistant />} />
+                  <Route path="/growth"      element={<GrowthEngine />} />
+                  <Route path="/collection-dashboard" element={<CollectionDashboard />} />
                   <Route path="/tasks"       element={<BusinessOperations />} />
                   <Route path="/proposals"   element={<BusinessOperations />} />
                   <Route path="/tenders"     element={<BusinessOperations />} />
