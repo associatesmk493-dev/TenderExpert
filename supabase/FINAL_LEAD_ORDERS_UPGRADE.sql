@@ -12,6 +12,17 @@ alter table public.b2g_leads
   add column if not exists on_hold boolean not null default false,
   add column if not exists on_hold_reason text;
 
+alter table public.b2g_leads
+  add column if not exists department_client text,
+  add column if not exists plant_capacity text,
+  add column if not exists existing_problem text,
+  add column if not exists sanctioned_budget numeric(14,2) not null default 0,
+  add column if not exists proposed_technology text,
+  add column if not exists boq_status text not null default 'not_started',
+  add column if not exists tender_timeline date,
+  add column if not exists commercial_model text,
+  add column if not exists expected_profit numeric(14,2) not null default 0;
+
 alter table public.b2g_projects
   add column if not exists order_number text,
   add column if not exists estimated_cost numeric(14,2) not null default 0 check (estimated_cost>=0),
@@ -54,6 +65,44 @@ create table if not exists public.b2g_payment_receipts(
   created_by uuid references auth.users(id) on delete set null default auth.uid(),
   created_at timestamptz not null default now()
 );
+
+create table if not exists public.b2g_personal_scorecards(
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  scorecard_date date not null default current_date,
+  cash_collected numeric(14,2) not null default 0,
+  advances_expected numeric(14,2) not null default 0,
+  strongest_followups text,
+  meetings_completed integer not null default 0,
+  proposals_submitted integer not null default 0,
+  deals_awaiting_decision integer not null default 0,
+  outstanding_payments numeric(14,2) not null default 0,
+  tomorrow_top_actions text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(user_id,scorecard_date)
+);
+alter table public.b2g_personal_scorecards enable row level security;
+drop policy if exists "users_manage_own_scorecards" on public.b2g_personal_scorecards;
+create policy "users_manage_own_scorecards" on public.b2g_personal_scorecards for all to authenticated using ((select auth.uid())=user_id) with check ((select auth.uid())=user_id);
+grant select,insert,update,delete on public.b2g_personal_scorecards to authenticated;
+
+create table if not exists public.b2g_weekly_conversion_scorecards(
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  week_start date not null, week_end date not null,
+  qualified_leads integer not null default 0, quotations integer not null default 0,
+  quotation_value numeric(14,2) not null default 0, decision_dates integer not null default 0,
+  advances integer not null default 0, cash_collected numeric(14,2) not null default 0,
+  meetings integer not null default 0, deals_lost integer not null default 0,
+  lost_reasons jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  unique(user_id,week_start)
+);
+alter table public.b2g_weekly_conversion_scorecards enable row level security;
+drop policy if exists "users_manage_own_weekly_scorecards" on public.b2g_weekly_conversion_scorecards;
+create policy "users_manage_own_weekly_scorecards" on public.b2g_weekly_conversion_scorecards for all to authenticated using ((select auth.uid())=user_id) with check ((select auth.uid())=user_id);
+grant select,insert,update,delete on public.b2g_weekly_conversion_scorecards to authenticated;
 
 create table if not exists public.b2g_expenses(
   id uuid primary key default gen_random_uuid(),
@@ -109,3 +158,19 @@ from public.b2g_payment_milestones m
 inner join public.b2g_projects p on p.id=m.project_id
 inner join public.b2g_leads l on l.id=p.lead_id;
 grant select on public.b2g_collection_dashboard to authenticated;
+
+-- New leads automatically receive a next-day dashboard follow-up.
+create or replace function public.schedule_new_b2g_lead_followup()
+returns trigger language plpgsql security invoker set search_path = '' as $$
+declare followup_at timestamptz;
+begin
+  followup_at := coalesce(new.next_follow_up_at,((date_trunc('day',new.created_at at time zone 'Asia/Kolkata')+interval '1 day 10 hours') at time zone 'Asia/Kolkata'));
+  if new.next_follow_up_at is null then
+    update public.b2g_leads set next_follow_up_at=followup_at where id=new.id;
+  end if;
+  insert into public.b2g_tasks(lead_id,title,description,task_type,priority,due_at,assigned_to,created_by)
+  values(new.id,'First follow-up: '||new.organization_name,'Review the new lead, contact the client and record the outcome.','follow_up',case when new.heat='hot' then 'high' else 'medium' end,followup_at,new.assigned_to,coalesce(new.created_by,(select auth.uid())));
+  return new;
+end $$;
+drop trigger if exists b2g_new_lead_next_day_followup on public.b2g_leads;
+create trigger b2g_new_lead_next_day_followup after insert on public.b2g_leads for each row execute function public.schedule_new_b2g_lead_followup();

@@ -338,6 +338,7 @@ body,
 
 body {
   overflow-x: hidden;
+  overscroll-behavior-y: none;
 }
 
 @media (max-width: 767px) {
@@ -358,6 +359,36 @@ body {
     font-size: 16px;
   }
 
+  main button,
+  main [role='button'],
+  main input:not([type='checkbox']):not([type='radio']),
+  main textarea,
+  main [role='combobox'] {
+    min-height: 44px;
+  }
+
+  main .grid > *,
+  main .flex > *,
+  main article,
+  main section,
+  main [class*='CardContent'] {
+    min-width: 0;
+  }
+
+  main h1 {
+    font-size: clamp(1.65rem, 8vw, 2rem);
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  main h2,
+  main h3,
+  main p,
+  main strong,
+  main span {
+    overflow-wrap: anywhere;
+  }
+
   input[type='date'],
   input[type='datetime-local'] {
     min-width: 0;
@@ -366,7 +397,15 @@ body {
 
   [role='dialog'] {
     -webkit-overflow-scrolling: touch;
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    bottom: 0 !important;
+    left: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px))) !important;
+    transform: none !important;
+    border-radius: 1.25rem 1.25rem 0 0 !important;
+    padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom)) !important;
   }
 
   [role='dialog'] button {
@@ -385,6 +424,25 @@ body {
   nav.safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+
+  [data-radix-popper-content-wrapper] {
+    max-width: calc(100vw - 1rem) !important;
+  }
+
+  table {
+    min-width: max-content;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  a,
+  button,
+  [role='button'] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 @media (max-width: 420px) {
@@ -394,5 +452,12 @@ body {
 
   [role='dialog'] {
     gap: 0.75rem;
+  }
+}
+
+@media (max-width: 359px) {
+  main .grid.grid-cols-2,
+  main .grid.grid-cols-3 {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

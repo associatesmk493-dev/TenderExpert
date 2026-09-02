@@ -113,7 +113,7 @@ export function ChatAssistantPanel({ className, onClose }: { className?: string;
 export default function TenderExpertAssistant() {
   const [open, setOpen] = useState(false);
   return <>
-    {open&&<div className="fixed bottom-[9.25rem] left-3 right-3 z-40 h-[min(68dvh,620px)] md:bottom-24 md:left-auto md:right-6 md:w-[420px]"><ChatAssistantPanel onClose={()=>setOpen(false)}/></div>}
-    <Button size="icon" aria-label={open?'Close AI assistant':'Open AI assistant'} onClick={()=>setOpen(value=>!value)} className="fixed bottom-24 right-4 z-40 h-14 w-14 rounded-2xl shadow-lg md:bottom-6 md:right-6">{open?<X className="h-5 w-5"/>:<MessageCircle className="h-5 w-5"/>}</Button>
+    {open&&<div className="fixed bottom-[calc(9.25rem+env(safe-area-inset-bottom,0px))] left-3 right-3 z-40 h-[min(68dvh,620px)] md:bottom-24 md:left-auto md:right-6 md:w-[420px]"><ChatAssistantPanel onClose={()=>setOpen(false)}/></div>}
+    <Button size="icon" aria-label={open?'Close AI assistant':'Open AI assistant'} onClick={()=>setOpen(value=>!value)} className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom,0px))] right-4 z-40 h-14 w-14 rounded-2xl shadow-lg md:bottom-6 md:right-6">{open?<X className="h-5 w-5"/>:<MessageCircle className="h-5 w-5"/>}</Button>
   </>;
 }

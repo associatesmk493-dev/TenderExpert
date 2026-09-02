@@ -43,6 +43,7 @@ const BusinessOperations = lazyWithRetry(() => import("@/pages/BusinessOperation
 const AIAssistant = lazyWithRetry(() => import("@/pages/AIAssistant"));
 const GrowthEngine = lazyWithRetry(() => import("@/pages/GrowthEngine"));
 const CollectionDashboard = lazyWithRetry(() => import("@/pages/CollectionDashboard"));
+const ProposalTemplates = lazyWithRetry(() => import("@/pages/ProposalTemplates"));
 const NotFound     = lazyWithRetry(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -96,6 +97,7 @@ const App = () => (
                   <Route path="/collection-dashboard" element={<CollectionDashboard />} />
                   <Route path="/tasks"       element={<BusinessOperations />} />
                   <Route path="/proposals"   element={<BusinessOperations />} />
+                  <Route path="/proposal-templates" element={<ProposalTemplates />} />
                   <Route path="/tenders"     element={<BusinessOperations />} />
                   <Route path="/documents"   element={<Navigate to="/leads" replace />} />
                   <Route path="/settings"    element={<BusinessOperations />} />

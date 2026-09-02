@@ -28,15 +28,40 @@ const AppLayout = () => {
   // Mobile / tablet: bottom nav + fixed notification bell
   if (isMobile) {
     return (
-      <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-background pb-28">
-        {/* Fixed notification bell — sits in the safe-area strip above page content */}
-        <div
-          className="fixed right-3 z-50"
-          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}
+      <div
+        className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-background"
+        style={{ paddingBottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <header
+          className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-border/50 bg-background/90 px-4 backdrop-blur-xl"
+          style={{
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            height: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+          }}
         >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <img
+              src="/tenderexpert-logo-hd.png"
+              alt="TenderExpert"
+              className="h-8 w-8 shrink-0 rounded-lg object-cover"
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold leading-tight text-primary">
+                TENDEREXPERT
+              </p>
+              <p className="truncate text-[10px] leading-tight text-muted-foreground">
+                B2G CRM
+              </p>
+            </div>
+          </div>
           <NotificationBell iconClassName="text-foreground/80" />
-        </div>
-        <main className="min-w-0 w-full"><Outlet /></main>
+        </header>
+        <main
+          className="min-w-0 w-full"
+          style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }}
+        >
+          <Outlet />
+        </main>
         {location.pathname !== '/assistant' && <TenderExpertAssistant />}
         <BottomNav />
       </div>
