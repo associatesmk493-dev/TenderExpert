@@ -2,3 +2,6 @@ project_id = "iirrndbzniiotzosemvh"
 
 [functions.tenderexpert-ai]
 verify_jwt = true
+
+[functions.admin-reset-password]
+verify_jwt = true

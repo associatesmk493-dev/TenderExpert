@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, UserCircle, Heart, ContactRound, WalletCards, Download, ClipboardList, Megaphone, TrendingUp, BadgeIndianRupee, Landmark, ReceiptText, Settings2, FileText, Receipt } from 'lucide-react';
+import { LayoutDashboard, Users, UserCircle, Heart, ContactRound, WalletCards, Download, ClipboardList, Megaphone, TrendingUp, BadgeIndianRupee, Landmark, ReceiptText, Settings2, FileText, Receipt, UsersRound } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -38,6 +38,7 @@ export function AppSidebar() {
   ];
 
   const accountItems = [
+    { title: 'Team', url: '/team', icon: UsersRound },
     { title: 'Profile', url: '/profile', icon: UserCircle },
     { title: 'Install App', url: '/install', icon: Download },
     { title: 'Integrations', url: '/settings', icon: Settings2 },

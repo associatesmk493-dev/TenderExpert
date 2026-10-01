@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import type { Profile, AppRole, Showroom } from '@/types/crm';
-import { Users, Shield, Plus, Building2, Trash2 } from 'lucide-react';
+import { Users, Shield, Plus, Building2, Trash2, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 const roleLabels: Record<string, string> = { ceo: 'CEO', manager: 'Manager', team_member: 'Team Member', admin: 'Admin' };
@@ -29,6 +29,10 @@ const TeamManagement = () => {
   const [showroomName, setShowroomName] = useState('');
   const [showroomCity, setShowroomCity] = useState('');
   const [showAddShowroom, setShowAddShowroom] = useState(false);
+  const [resetMember, setResetMember] = useState<TeamMember | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const fetchData = async () => {
     const [profilesRes, rolesRes, showroomsRes, membershipsRes] = await Promise.all([
       supabase.from('profiles').select('*'),
@@ -85,6 +89,26 @@ const TeamManagement = () => {
   const deleteShowroom = async (id: string) => {
     await supabase.from('showrooms').delete().eq('id', id);
     toast({ title: 'Location removed' }); fetchData();
+  };
+
+  const resetPassword = async () => {
+    if (!resetMember || newPassword.length < 6) {
+      toast({ title: 'Password too short', description: 'Use at least 6 characters.', variant: 'destructive' });
+      return;
+    }
+    setResetting(true);
+    const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+      body: { user_id: resetMember.user_id, new_password: newPassword },
+    });
+    setResetting(false);
+    if (error || data?.error) {
+      toast({ title: 'Password could not be reset', description: data?.error || error?.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: `Password updated for ${resetMember.full_name}` });
+    setResetMember(null);
+    setNewPassword('');
+    setShowNewPassword(false);
   };
 
   if (loading) {
@@ -232,6 +256,18 @@ const TeamManagement = () => {
                             )}
                           </div>
                         </div>
+                        {!isViewOnly && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-lg shrink-0"
+                            title="Reset password"
+                            aria-label={`Reset password for ${member.full_name}`}
+                            onClick={() => { setResetMember(member); setNewPassword(''); setShowNewPassword(false); }}
+                          >
+                            <KeyRound className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        )}
                       </div>
                       {!isViewOnly && (
                         <div className="grid grid-cols-2 gap-2">
@@ -269,6 +305,40 @@ const TeamManagement = () => {
             </Card>
           </div>
       </div>
+
+      <Dialog open={resetMember !== null} onOpenChange={(open) => { if (!open) { setResetMember(null); setNewPassword(''); setShowNewPassword(false); } }}>
+        <DialogContent className="rounded-2xl sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Reset password</DialogTitle>
+            <p className="text-[13px] text-muted-foreground">
+              Set a new password for <span className="font-semibold text-foreground">{resetMember?.full_name}</span>. No email is sent — they can sign in with this password right away.
+            </p>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-medium text-foreground uppercase tracking-wider">New password</label>
+            <div className="relative">
+              <Input
+                type={showNewPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="••••••••"
+                minLength={6}
+                autoFocus
+                className="h-11 rounded-xl pr-11"
+              />
+              <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setResetMember(null)}>Cancel</Button>
+            <Button className="rounded-xl" disabled={resetting || newPassword.length < 6} onClick={resetPassword}>
+              {resetting ? 'Updating…' : 'Update password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
