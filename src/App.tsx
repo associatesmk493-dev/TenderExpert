@@ -11,6 +11,7 @@ import AppLayout from "@/components/AppLayout";
 // Auth + Dashboard load eagerly (first screens user sees)
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
+import ResetPassword from "@/pages/ResetPassword";
 
 // Wraps lazy() to auto-reload once on chunk load failure (stale deployment cache)
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -44,6 +45,8 @@ const AIAssistant = lazyWithRetry(() => import("@/pages/AIAssistant"));
 const GrowthEngine = lazyWithRetry(() => import("@/pages/GrowthEngine"));
 const CollectionDashboard = lazyWithRetry(() => import("@/pages/CollectionDashboard"));
 const ProposalTemplates = lazyWithRetry(() => import("@/pages/ProposalTemplates"));
+const Invoices = lazyWithRetry(() => import("@/pages/Invoices"));
+const InvoiceSettings = lazyWithRetry(() => import("@/pages/InvoiceSettings"));
 const NotFound     = lazyWithRetry(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -77,6 +80,7 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route element={<AppLayout />}>
                   <Route path="/"           element={<Dashboard />} />
                   <Route path="/leads"      element={<Leads />} />
@@ -98,9 +102,11 @@ const App = () => (
                   <Route path="/tasks"       element={<BusinessOperations />} />
                   <Route path="/proposals"   element={<BusinessOperations />} />
                   <Route path="/proposal-templates" element={<ProposalTemplates />} />
+                  <Route path="/proforma-invoices" element={<Invoices type="proforma" />} />
+                  <Route path="/tax-invoices" element={<Invoices type="tax" />} />
                   <Route path="/tenders"     element={<BusinessOperations />} />
                   <Route path="/documents"   element={<Navigate to="/leads" replace />} />
-                  <Route path="/settings"    element={<BusinessOperations />} />
+                  <Route path="/settings"    element={<InvoiceSettings />} />
                   <Route path="/team"       element={<TeamManagement />} />
                   <Route path="/install"    element={<InstallApp />} />
                   <Route path="/profile"    element={<Profile />} />

@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, UserCircle, Heart, ContactRound, WalletCards, Download, ClipboardList, Megaphone, TrendingUp, BadgeIndianRupee, Landmark, ReceiptText, Settings2 } from 'lucide-react';
+import { LayoutDashboard, Users, UserCircle, Heart, ContactRound, WalletCards, Download, ClipboardList, Megaphone, TrendingUp, BadgeIndianRupee, Landmark, ReceiptText, Settings2, FileText, Receipt } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -31,6 +31,8 @@ export function AppSidebar() {
     { title: 'Payments', url: '/orders', icon: WalletCards },
     { title: 'Proposals', url: '/proposals', icon: ReceiptText },
     { title: 'Proposal Templates', url: '/proposal-templates', icon: ClipboardList },
+    { title: 'Proforma Invoices', url: '/proforma-invoices', icon: FileText },
+    { title: 'Tax Invoices', url: '/tax-invoices', icon: Receipt },
     { title: 'Tender Opportunities', url: '/tenders', icon: Landmark },
     { title: 'Campaigns', url: '/campaigns', icon: Megaphone },
   ];

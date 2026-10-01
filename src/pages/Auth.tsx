@@ -16,12 +16,13 @@ const Auth = () => {
   const { user, loading } = useAuth();
   const { toast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<'credentials' | 'forgot' | 'sent'>('credentials');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, resetPassword } = useAuth();
 
   if (loading) {
     return (
@@ -37,7 +38,10 @@ const Auth = () => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      if (isLogin) {
+      if (mode === 'forgot') {
+        await resetPassword(email);
+        setMode('sent');
+      } else if (isLogin) {
         await signIn(email, password);
         toast({ title: 'Welcome back!' });
       } else {
@@ -133,7 +137,11 @@ const Auth = () => {
           <div className="space-y-1.5">
             <h1 className="text-3xl font-extrabold text-primary tracking-tight uppercase">TENDEREXPERT</h1>
             <p className="text-[15px] text-muted-foreground">
-              {isLogin ? 'Welcome back! Sign in to continue.' : 'Create your account to get started.'}
+              {mode === 'forgot'
+                ? 'Enter your email and we will send you a password reset link.'
+                : mode === 'sent'
+                ? 'Check your inbox for the reset link.'
+                : isLogin ? 'Welcome back! Sign in to continue.' : 'Create your account to get started.'}
             </p>
           </div>
         </div>
@@ -145,8 +153,23 @@ const Auth = () => {
             backdropFilter: 'blur(24px) saturate(180%)',
             boxShadow: 'var(--shadow-card)',
           }}>
+          {mode === 'sent' ? (
+            <div className="space-y-5 text-center">
+              <p className="text-[15px] text-muted-foreground">
+                We've sent a password reset link to <span className="font-semibold text-foreground">{email}</span>. Open it on this device to set a new password.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-12 rounded-xl text-[15px] font-semibold"
+                onClick={() => { setMode('credentials'); setIsLogin(true); }}
+              >
+                Back to sign in
+              </Button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
+            {mode === 'credentials' && !isLogin && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-[13px] font-medium text-muted-foreground uppercase tracking-wider">First Name</label>
@@ -186,24 +209,37 @@ const Auth = () => {
                 className="h-12 rounded-xl bg-secondary/50 border-border/60 px-4 text-[15px] focus-visible:ring-primary/40 transition-all duration-300"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-medium text-muted-foreground uppercase tracking-wider">Password</label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="h-12 rounded-xl bg-secondary/50 border-border/60 px-4 pr-11 text-[15px] focus-visible:ring-primary/40 transition-all duration-300"
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+            {mode === 'credentials' && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[13px] font-medium text-muted-foreground uppercase tracking-wider">Password</label>
+                  {isLogin && (
+                    <button
+                      type="button"
+                      onClick={() => setMode('forgot')}
+                      className="text-[13px] font-semibold text-primary hover:underline underline-offset-2"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="h-12 rounded-xl bg-secondary/50 border-border/60 px-4 pr-11 text-[15px] focus-visible:ring-primary/40 transition-all duration-300"
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
             <Button
               type="submit"
               className="w-full h-12 rounded-xl text-[15px] font-semibold shadow-lg shadow-primary/20 transition-all duration-300 hover:shadow-xl hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] border-0"
@@ -212,6 +248,8 @@ const Auth = () => {
             >
               {submitting ? (
                 <div className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+              ) : mode === 'forgot' ? (
+                'Send reset link'
               ) : (
                 <span className="flex items-center gap-2">
                   {isLogin ? 'Sign In' : (
@@ -223,15 +261,27 @@ const Auth = () => {
                 </span>
               )}
             </Button>
+            {mode === 'forgot' && (
+              <button
+                type="button"
+                onClick={() => setMode('credentials')}
+                className="w-full text-center text-[13px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Back to sign in
+              </button>
+            )}
           </form>
+          )}
         </div>
 
+        {mode === 'credentials' && (
         <p className="text-center text-[15px] text-muted-foreground animate-in-delay">
           {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
           <button onClick={() => setIsLogin(!isLogin)} className="text-primary font-semibold hover:underline underline-offset-2 transition-colors">
             {isLogin ? 'Sign Up' : 'Sign In'}
           </button>
         </p>
+        )}
 
         <div className="mx-auto w-24 h-px opacity-20" style={{ background: 'var(--gradient-primary)' }} />
 

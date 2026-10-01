@@ -147,7 +147,7 @@ export default function ProposalTemplates() {
           </p>
           <h1 className="mt-1 text-3xl font-bold">Proposal templates</h1>
           <p className="text-muted-foreground">
-            Reusable scope, subject and commercial-term formats for proposals
+            Shared email templates with dynamic client and invoice details
           </p>
         </div>
         <Button onClick={createNew}>
@@ -246,6 +246,10 @@ export default function ProposalTemplates() {
                 placeholder="Proposal for {{organization}}"
               />
             </Field>
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+              <p className="font-semibold text-primary mb-1">Dynamic placeholders</p>
+              Use these in the subject or message: <code>{'{{client_name}}'}</code>, <code>{'{{company_name}}'}</code>, <code>{'{{invoice_number}}'}</code>, <code>{'{{invoice_date}}'}</code>, <code>{'{{due_date}}'}</code>, <code>{'{{total_amount}}'}</code>, <code>{'{{salesperson_name}}'}</code>.
+            </div>
             <Field label="Standard scope of work *">
               <Textarea
                 rows={7}
