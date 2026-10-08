@@ -16,8 +16,12 @@ const blank = {
   phone: '',
   address: '',
   gst_number: '',
+  pan_number: '',
+  website: '',
+  tagline: '',
   logo_url: '',
   bank_name: '',
+  bank_branch: '',
   account_name: '',
   account_number: '',
   ifsc_code: '',
@@ -100,6 +104,9 @@ export default function InvoiceSettings() {
         <div className="grid md:grid-cols-2 gap-4">
           <Field label="Company name *"><Input value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="MK Associates" /></Field>
           <Field label="GST number"><Input value={form.gst_number} onChange={e => set('gst_number', e.target.value)} placeholder="22AAAAA0000A1Z5" /></Field>
+          <Field label="PAN number"><Input value={form.pan_number} onChange={e => set('pan_number', e.target.value)} /></Field>
+          <Field label="Tagline"><Input value={form.tagline} onChange={e => set('tagline', e.target.value)} placeholder="Strategic B2G Consulting & Procurement" /></Field>
+          <Field label="Website"><Input value={form.website} onChange={e => set('website', e.target.value)} placeholder="www.example.com" /></Field>
           <Field label="Email"><Input type="email" value={form.email} onChange={e => set('email', e.target.value)} /></Field>
           <Field label="Phone"><Input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+91" /></Field>
           <div className="md:col-span-2"><Field label="Address"><Textarea value={form.address} onChange={e => set('address', e.target.value)} placeholder="Registered office address" /></Field></div>
@@ -113,6 +120,7 @@ export default function InvoiceSettings() {
           <Field label="Account holder name"><Input value={form.account_name} onChange={e => set('account_name', e.target.value)} /></Field>
           <Field label="Account number"><Input value={form.account_number} onChange={e => set('account_number', e.target.value)} /></Field>
           <Field label="IFSC code"><Input value={form.ifsc_code} onChange={e => set('ifsc_code', e.target.value)} /></Field>
+          <Field label="Branch"><Input value={form.bank_branch} onChange={e => set('bank_branch', e.target.value)} /></Field>
         </div>
       </CardContent></Card>
 

@@ -248,7 +248,7 @@ export default function ProposalTemplates() {
             </Field>
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
               <p className="font-semibold text-primary mb-1">Dynamic placeholders</p>
-              Use these in the subject or message: <code>{'{{client_name}}'}</code>, <code>{'{{company_name}}'}</code>, <code>{'{{invoice_number}}'}</code>, <code>{'{{invoice_date}}'}</code>, <code>{'{{due_date}}'}</code>, <code>{'{{total_amount}}'}</code>, <code>{'{{salesperson_name}}'}</code>.
+              Use these in the subject or message: <code>{'{{client_name}}'}</code>, <code>{'{{company_name}}'}</code>, <code>{'{{invoice_type}}'}</code>, <code>{'{{invoice_number}}'}</code>,<code>{'{{invoice_date}}'}</code>, <code>{'{{due_date}}'}</code>, <code>{'{{total_amount}}'}</code>, <code>{'{{salesperson_name}}'}</code>.
             </div>
             <Field label="Standard scope of work *">
               <Textarea

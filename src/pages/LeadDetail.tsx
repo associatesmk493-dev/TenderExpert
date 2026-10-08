@@ -41,6 +41,7 @@ const stages: Record<string, string[]> = {
     "documents_received",
     "proposal_submitted",
     "negotiation",
+    "generate_pi",
     "advance_received",
     "project_started",
     "submission_completed",
@@ -55,6 +56,7 @@ const stages: Record<string, string[]> = {
     "opportunity_discussion",
     "proposal_submitted",
     "negotiation",
+    "generate_pi",
     "agreement_signed",
     "project_active",
     "technical_presentation",
@@ -69,6 +71,7 @@ const stages: Record<string, string[]> = {
     "tender_evaluation",
     "go_no_go_decision",
     "proposal_submitted",
+    "generate_pi",
     "work_order_received",
     "bid_submission",
     "result_awaited",
@@ -77,7 +80,10 @@ const stages: Record<string, string[]> = {
   ],
 };
 const title = (x: string) =>
-  x?.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  x
+    ?.replaceAll("_", " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace(/\bPi\b/g, "PI");
 const money = (n: number) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
