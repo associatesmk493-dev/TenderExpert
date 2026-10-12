@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SHOW_AUTOMATION } from "@/lib/features";
 import GrowthScorecards from "@/components/GrowthScorecards";
 import {
   Activity,
@@ -390,8 +391,8 @@ export default function GrowthEngine() {
           </p>
           <h1 className="text-3xl font-bold mt-1">Decision cockpit</h1>
           <p className="text-muted-foreground">
-            Actions, cash flow, profitability, pipeline velocity and AI
-            suggestions
+            Actions, cash flow, profitability and pipeline velocity
+            {SHOW_AUTOMATION ? " and AI suggestions" : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -399,10 +400,12 @@ export default function GrowthEngine() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button onClick={runAutomations} disabled={running}>
-            <Sparkles className="h-4 w-4 mr-2" />
-            {running ? "Running…" : "Run automations"}
-          </Button>
+          {SHOW_AUTOMATION && (
+            <Button onClick={runAutomations} disabled={running}>
+              <Sparkles className="h-4 w-4 mr-2" />
+              {running ? "Running…" : "Run automations"}
+            </Button>
+          )}
         </div>
       </div>
       {error && (
@@ -457,7 +460,9 @@ export default function GrowthEngine() {
           <TabsTrigger value="profit">Profitability</TabsTrigger>
           <TabsTrigger value="funnel">Funnel velocity</TabsTrigger>
           <TabsTrigger value="scorecards">Scorecards</TabsTrigger>
-          <TabsTrigger value="ai">AI review desk</TabsTrigger>
+          {SHOW_AUTOMATION && (
+            <TabsTrigger value="ai">AI review desk</TabsTrigger>
+          )}
         </TabsList>
         <TabsContent value="actions">
           <Card className="border-0 shadow-sm">
@@ -675,6 +680,7 @@ export default function GrowthEngine() {
         <TabsContent value="scorecards">
           <GrowthScorecards />
         </TabsContent>
+        {SHOW_AUTOMATION && (
         <TabsContent value="ai">
           <div className="space-y-3">
             {data.insights.map((insight) => (
@@ -731,6 +737,7 @@ export default function GrowthEngine() {
             )}
           </div>
         </TabsContent>
+        )}
       </Tabs>
     </div>
   );

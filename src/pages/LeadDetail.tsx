@@ -20,6 +20,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import DictateButton from "@/components/DictateButton";
+import { SHOW_AUTOMATION } from "@/lib/features";
+import {
+  CLOSED_STAGES,
+  LOST_REASONS,
+  leadState,
+  sourceLabel,
+} from "@/lib/leadOptions";
 import {
   ArrowLeft,
   BrainCircuit,
@@ -31,6 +51,9 @@ import {
   Pencil,
   Phone,
   Plus,
+  RotateCcw,
+  Trash2,
+  UserX,
 } from "lucide-react";
 const stages: Record<string, string[]> = {
   brand_approval: [
@@ -145,7 +168,37 @@ export default function LeadDetail() {
     setNote("");
     load();
   };
+  const markNotInterested = () =>
+    update({
+      lost_reason_code: "not_interested",
+      closed_at: lead.closed_at || new Date().toISOString(),
+      heat: "cold",
+    });
+  const reopenLead = () =>
+    update({
+      lost_reason_code: null,
+      closed_at: CLOSED_STAGES.includes(lead.stage) ? lead.closed_at : null,
+    });
+  const deleteLead = async () => {
+    const { error } = await supabase
+      .from("b2g_leads" as any)
+      .delete()
+      .eq("id", id);
+    if (error) {
+      toast({
+        title: "Lead could not be deleted",
+        description: /foreign key|violates/i.test(error.message)
+          ? "This lead already has orders or payments, so it cannot be deleted. Use “Not interested” to move it out of the active list."
+          : error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Lead deleted" });
+    nav("/leads");
+  };
   if (!lead) return <div className="p-8">Loading opportunity…</div>;
+  const state = leadState(lead);
   return (
     <div className="min-h-full bg-slate-50/60 p-4 md:p-7">
       <button
@@ -168,8 +221,17 @@ export default function LeadDetail() {
             <div className="flex flex-wrap gap-2 mt-2">
               <Badge>{title(lead.pipeline)}</Badge>
               <Badge variant="outline">
-                {title(lead.heat)} · AI {lead.ai_score}
+                {title(lead.heat)}
+                {SHOW_AUTOMATION ? ` · AI ${lead.ai_score}` : ""}
               </Badge>
+              {state === "lost" && (
+                <Badge variant="destructive">
+                  {lead.lost_reason_code === "not_interested"
+                    ? "Not interested"
+                    : `Lost · ${title(lead.lost_reason_code)}`}
+                </Badge>
+              )}
+              {state === "closed" && <Badge variant="secondary">Closed</Badge>}
             </div>
           </div>
         </div>
@@ -200,6 +262,53 @@ export default function LeadDetail() {
               </a>
             </Button>
           )}
+          {state === "active" ? (
+            <Button
+              variant="outline"
+              title="Move to the Not interested list"
+              onClick={markNotInterested}
+            >
+              <UserX className="h-4 w-4 mr-2" />
+              Not interested
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={reopenLead}>
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reopen lead
+            </Button>
+          )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="text-destructive"
+                aria-label="Delete lead"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this lead permanently?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  “{lead.organization_name}” and its follow-ups, notes and
+                  quotations will be removed. This cannot be undone. If the
+                  client is just not interested, use “Not interested” instead —
+                  it keeps the history.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={deleteLead}
+                >
+                  Delete lead
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
       <div className="grid lg:grid-cols-3 gap-5">
@@ -212,13 +321,11 @@ export default function LeadDetail() {
                 onValueChange={(v) =>
                   update({
                     stage: v,
-                    closed_at: [
-                      "closed",
-                      "completed",
-                      "final_payment_received",
-                    ].includes(v)
+                    closed_at: CLOSED_STAGES.includes(v)
                       ? new Date().toISOString()
-                      : null,
+                      : lead.lost_reason_code
+                        ? lead.closed_at
+                        : null,
                   })
                 }
               >
@@ -243,7 +350,19 @@ export default function LeadDetail() {
               </div>
             </CardContent>
           </Card>
-          <LeadOpportunitySheet lead={lead} update={update} />
+          <Tabs defaultValue="overview" className="space-y-5">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="opportunity">Opportunity sheet</TabsTrigger>
+            </TabsList>
+            <TabsContent
+              value="opportunity"
+              forceMount
+              className="mt-0 data-[state=inactive]:hidden"
+            >
+              <LeadOpportunitySheet lead={lead} update={update} />
+            </TabsContent>
+            <TabsContent value="overview" className="mt-0 space-y-5">
           <Card className="border-0 shadow-sm">
             <CardContent className="p-5">
               <h2 className="font-bold mb-4">Customer intelligence</h2>
@@ -256,7 +375,14 @@ export default function LeadDetail() {
                     [lead.city, lead.state].filter(Boolean).join(", ") || "—"
                   }
                 />
-                <Info label="Source" value={title(lead.source)} />
+                <Info
+                  label="Source"
+                  value={
+                    lead.source === "event" && lead.event_name
+                      ? `Event — ${lead.event_name}`
+                      : sourceLabel(lead.source)
+                  }
+                />
                 <Info
                   label="Services"
                   value={lead.service_interest?.join(", ") || "—"}
@@ -365,7 +491,14 @@ export default function LeadDetail() {
                   <Select
                     value={lead.lost_reason_code || "none"}
                     onValueChange={(v) =>
-                      update({ lost_reason_code: v === "none" ? null : v })
+                      v === "none"
+                        ? reopenLead()
+                        : update({
+                            lost_reason_code: v,
+                            closed_at:
+                              lead.closed_at || new Date().toISOString(),
+                            ...(v === "not_interested" ? { heat: "cold" } : {}),
+                          })
                     }
                   >
                     <SelectTrigger>
@@ -373,17 +506,7 @@ export default function LeadDetail() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Not lost</SelectItem>
-                      {[
-                        "price",
-                        "competitor",
-                        "budget_freeze",
-                        "no_response",
-                        "timeline",
-                        "scope_mismatch",
-                        "project_cancelled",
-                        "lost_to_incumbent",
-                        "other",
-                      ].map((v) => (
+                      {LOST_REASONS.map((v) => (
                         <SelectItem key={v} value={v}>
                           {title(v)}
                         </SelectItem>
@@ -431,7 +554,10 @@ export default function LeadDetail() {
             leadId={lead.id}
             organizationName={lead.organization_name}
           />
-          <LeadQuotationTimeline leadId={lead.id} />
+          <LeadQuotationTimeline
+            leadId={lead.id}
+            organizationName={lead.organization_name}
+          />
           <Card className="border-0 shadow-sm">
             <CardContent className="p-5">
               <LeadVoiceMeeting
@@ -457,6 +583,15 @@ export default function LeadDetail() {
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
+              <div className="mt-2 flex justify-end">
+                <DictateButton
+                  onText={(spoken) =>
+                    setNote((current) =>
+                      current ? `${current.trimEnd()} ${spoken}` : spoken,
+                    )
+                  }
+                />
+              </div>
               <div className="mt-5 space-y-3">
                 {acts.map((a) => (
                   <div
@@ -475,8 +610,11 @@ export default function LeadDetail() {
               </div>
             </CardContent>
           </Card>
+            </TabsContent>
+          </Tabs>
         </div>
         <div className="space-y-5">
+          {SHOW_AUTOMATION && (
           <Card className="border-0 shadow-sm bg-slate-950 text-white">
             <CardContent className="p-5">
               <div className="flex gap-2 items-center text-cyan-300">
@@ -494,6 +632,7 @@ export default function LeadDetail() {
               </p>
             </CardContent>
           </Card>
+          )}
           <Card className="border-0 shadow-sm">
             <CardContent className="p-5">
               <h2 className="font-bold flex items-center gap-2">
@@ -536,6 +675,66 @@ export default function LeadDetail() {
                   expected
                 </span>
               </p>
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                Expected = Proposal value × Probability. Raise the probability as
+                the deal moves forward; the dashboard uses it to forecast
+                revenue.
+              </p>
+              <div className="mt-5 space-y-3 border-t pt-4">
+                <h3 className="text-sm font-bold">Fund flow</h3>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">
+                    Total amount (agreed order value)
+                  </span>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    min="0"
+                    defaultValue={lead.total_amount || 0}
+                    onBlur={(e) =>
+                      update({ total_amount: Number(e.target.value || 0) })
+                    }
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">
+                    Amount received so far
+                  </span>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    min="0"
+                    defaultValue={lead.received_amount || 0}
+                    onBlur={(e) =>
+                      update({ received_amount: Number(e.target.value || 0) })
+                    }
+                  />
+                </label>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p
+                    className={`font-bold ${Number(lead.total_amount) - Number(lead.received_amount) > 0 ? "text-rose-700" : "text-emerald-700"}`}
+                  >
+                    {money(
+                      Math.max(
+                        0,
+                        Number(lead.total_amount || 0) -
+                          Number(lead.received_amount || 0),
+                      ),
+                    )}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Balance payment
+                  </p>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full bg-emerald-500"
+                      style={{
+                        width: `${Math.min(100, Number(lead.total_amount) > 0 ? (Number(lead.received_amount || 0) * 100) / Number(lead.total_amount) : 0)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
           <Card className="border-0 shadow-sm">

@@ -116,7 +116,7 @@ const parseBusinessType = (raw: string): string | null => {
 const SAMPLE_CSV = `customer_name,company,phone,email,industry,equipment_interest,quoted_amount,notes
 Rahul Sharma,AquaTech Industries,9876543210,rahul@aquatech.in,Water & Wastewater,Brand Approval,250000,Requires government product approval
 Priya Singh,InfraBuild Solutions,8765432109,priya@infrabuild.in,Infrastructure,Tender Consultancy,500000,Interested in upcoming state tenders
-Amit Patel,MediPrime Healthcare,7654321098,amit@mediprime.in,Healthcare,Vendor Registration,180000,Needs registration support`;
+Amit Patel,MediPrime Healthcare,7654321098,amit@mediprime.in,Healthcare,CPWD Class Registration,180000,Needs registration support`;
 
 const splitCsvLine = (line: string): string[] => {
   const cols: string[] = [];

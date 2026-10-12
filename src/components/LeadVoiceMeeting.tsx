@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -12,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ListChecks, Loader2, Mic, MicOff, Sparkles } from "lucide-react";
+import { ListChecks, Loader2, Mic, MicOff, Save, Sparkles } from "lucide-react";
+import { SPEECH_LANGUAGES, useSpeechToText } from "@/hooks/useSpeechToText";
 
 export default function LeadVoiceMeeting({
   leadId,
@@ -26,17 +28,21 @@ export default function LeadVoiceMeeting({
   const { user } = useAuth();
   const { toast } = useToast();
   const [language, setLanguage] = useState("en-IN"),
-    [projectId, setProjectId] = useState("general"),
+    [projectId] = useState("general"),
     [projects, setProjects] = useState<any[]>([]),
-    [listening, setListening] = useState(false),
-    [text, setText] = useState(""),
-    [interim, setInterim] = useState(""),
+    [draft, setDraft] = useState(""),
     [recent, setRecent] = useState<any[]>([]),
     [saving, setSaving] = useState(false),
     [summarizingId, setSummarizingId] = useState("");
-  const recognition = useRef<any>();
-  const finalText = useRef("");
+  const baseText = useRef("");
   const started = useRef(0);
+  const speech = useSpeechToText(language, (message) =>
+    toast({
+      title: "Voice typing",
+      description: message,
+      variant: "destructive",
+    }),
+  );
   const load = () =>
     Promise.all([
       supabase
@@ -56,80 +62,53 @@ export default function LeadVoiceMeeting({
     });
   useEffect(() => {
     load();
-    return () => recognition.current?.abort?.();
   }, [leadId]);
-  const start = () => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition)
-      return toast({
-        title: "Voice transcription unavailable",
-        description: "Use Chrome or Edge and allow microphone access.",
-        variant: "destructive",
-      });
-    finalText.current = "";
-    setText("");
-    setInterim("");
+
+  // While listening, show what is being spoken right inside the text box.
+  useEffect(() => {
+    if (!speech.listening) return;
+    const dictated = `${speech.text} ${speech.interim}`.trim();
+    setDraft(
+      [baseText.current, dictated].filter(Boolean).join("\n"),
+    );
+  }, [speech.listening, speech.text, speech.interim]);
+
+  const toggle = async () => {
+    if (speech.listening) {
+      const spoken = speech.stop();
+      setDraft([baseText.current, spoken].filter(Boolean).join("\n"));
+      speech.reset();
+      return;
+    }
+    baseText.current = draft.trim();
     started.current = Date.now();
-    const instance = new SpeechRecognition();
-    recognition.current = instance;
-    instance.continuous = true;
-    instance.interimResults = true;
-    instance.lang = language;
-    instance.onresult = (event: any) => {
-      let current = "";
-      for (
-        let index = event.resultIndex;
-        index < event.results.length;
-        index++
-      ) {
-        const words = event.results[index][0].transcript;
-        if (event.results[index].isFinal) finalText.current += `${words} `;
-        else current += words;
-      }
-      setText(finalText.current.trim());
-      setInterim(current);
-    };
-    instance.onend = () => setListening(false);
-    instance.onerror = (event: any) => {
-      setListening(false);
-      toast({
-        title: "Microphone stopped",
-        description: event.error,
-        variant: "destructive",
-      });
-    };
-    instance.start();
-    setListening(true);
+    await speech.start();
   };
-  const stop = async () => {
-    recognition.current?.stop();
-    setListening(false);
-    const transcript = `${finalText.current} ${interim}`.trim();
-    if (!transcript) return toast({ title: "No speech detected" });
+
+  const save = async () => {
+    const transcript = draft.trim();
+    if (!transcript) return toast({ title: "Nothing to save yet" });
     setSaving(true);
-    const { error } = await supabase
-      .from("b2g_client_meetings" as any)
-      .insert({
-        lead_id: leadId,
-        project_id: projectId === "general" ? null : projectId,
-        transcript,
-        discussion_summary: null,
-        language,
-        duration_seconds: Math.round((Date.now() - started.current) / 1000),
-        recorded_by: user?.id,
-      });
+    const duration = started.current
+      ? Math.round((Date.now() - started.current) / 1000)
+      : 0;
+    const { error } = await supabase.from("b2g_client_meetings" as any).insert({
+      lead_id: leadId,
+      project_id: projectId === "general" ? null : projectId,
+      transcript,
+      discussion_summary: null,
+      language,
+      duration_seconds: duration,
+      recorded_by: user?.id,
+    });
     if (!error)
-      await supabase
-        .from("b2g_activities" as any)
-        .insert({
-          lead_id: leadId,
-          activity_type: "meeting",
-          subject: `Voice meeting — ${organizationName}${projectId === "general" ? "" : ` · ${projects.find((project) => project.id === projectId)?.project_name || "Order"}`}`,
-          description: transcript,
-          created_by: user?.id,
-        });
+      await supabase.from("b2g_activities" as any).insert({
+        lead_id: leadId,
+        activity_type: "meeting",
+        subject: `Meeting record — ${organizationName}${projectId === "general" ? "" : ` · ${projects.find((project) => project.id === projectId)?.project_name || "Order"}`}`,
+        description: transcript,
+        created_by: user?.id,
+      });
     setSaving(false);
     if (error)
       toast({
@@ -139,8 +118,9 @@ export default function LeadVoiceMeeting({
       });
     else {
       toast({ title: "Meeting saved to this lead" });
-      setText("");
-      setInterim("");
+      setDraft("");
+      baseText.current = "";
+      started.current = 0;
       load();
       onSaved?.();
     }
@@ -188,32 +168,37 @@ export default function LeadVoiceMeeting({
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="font-bold">Voice meeting record</h2>
+          <h2 className="font-bold">Meeting record — voice or typed</h2>
           <p className="text-xs text-muted-foreground">
-            Tap, speak and stop. Saved automatically against {organizationName}.
+            Tap the mic and speak (speech-to-text), or type. Check the text,
+            then save it against {organizationName}.
           </p>
         </div>
         <Select
           value={language}
           onValueChange={setLanguage}
-          disabled={listening}
+          disabled={speech.listening}
         >
           <SelectTrigger className="sm:w-44">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="en-IN">English (India)</SelectItem>
-            <SelectItem value="hi-IN">Hindi</SelectItem>
+            {SPEECH_LANGUAGES.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
-      <div className="py-6 text-center">
+      <div className="py-5 text-center">
         <Button
-          onClick={listening ? stop : start}
+          onClick={toggle}
           disabled={saving}
-          className={`h-20 w-20 rounded-full ${listening ? "bg-rose-600 hover:bg-rose-700 animate-pulse" : ""}`}
+          className={`h-20 w-20 rounded-full ${speech.listening ? "bg-rose-600 hover:bg-rose-700 animate-pulse" : ""}`}
+          aria-label={speech.listening ? "Stop recording" : "Start recording"}
         >
-          {listening ? (
+          {speech.listening ? (
             <MicOff className="h-8 w-8" />
           ) : (
             <Mic className="h-8 w-8" />
@@ -222,22 +207,47 @@ export default function LeadVoiceMeeting({
         <p className="text-sm font-semibold mt-3">
           {saving
             ? "Saving…"
-            : listening
-              ? "Listening — tap to save"
-              : "Tap to record meeting"}
+            : speech.listening
+              ? "Listening — tap to stop"
+              : "Tap to speak"}
         </p>
+        {!speech.supported && (
+          <p className="mx-auto mt-2 max-w-md text-xs text-amber-700">
+            Voice typing works in Google Chrome or Microsoft Edge. In this
+            browser you can type the meeting notes below.
+          </p>
+        )}
       </div>
-      {(text || interim) && (
-        <div className="rounded-xl bg-slate-950 text-white p-4">
-          <p className="text-xs text-cyan-300 flex items-center gap-1">
+      <div className="space-y-2">
+        {speech.listening && (
+          <p className="flex items-center gap-1 text-xs text-cyan-700">
             <Sparkles className="h-3 w-3" />
-            LIVE TRANSCRIPT
+            LIVE SPEECH-TO-TEXT
           </p>
-          <p className="text-sm mt-2">
-            {text} <span className="text-slate-400">{interim}</span>
-          </p>
+        )}
+        <Textarea
+          rows={5}
+          value={draft}
+          disabled={speech.listening}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Your spoken words appear here. You can also type or correct the text before saving."
+        />
+        <div className="flex flex-wrap justify-end gap-2">
+          {draft && !speech.listening && (
+            <Button variant="ghost" size="sm" onClick={() => setDraft("")}>
+              Clear
+            </Button>
+          )}
+          <Button
+            size="sm"
+            disabled={saving || speech.listening || !draft.trim()}
+            onClick={save}
+          >
+            <Save className="mr-1.5 h-4 w-4" />
+            Save meeting
+          </Button>
         </div>
-      )}
+      </div>
       <div className="space-y-3 mt-4">
         {recent.map((row) => (
           <div key={row.id} className="rounded-xl border p-4">

@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useEffect, useState } from "react";
-import { CalendarClock, CheckCircle2, Plus, RotateCcw } from "lucide-react";
+import {
+  CalendarClock,
+  CheckCircle2,
+  Pencil,
+  Plus,
+  RotateCcw,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -15,10 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import TaskEditDialog from "@/components/TaskEditDialog";
 
 const blank = {
   title: "",
-  responsible_person: "",
+  assignee: "",
+  other_person: "",
   due_at: "",
   escalation_level: "0",
 };
@@ -36,32 +44,44 @@ export default function LeadFollowUpManager({
   const { user } = useAuth();
   const { toast } = useToast();
   const [tasks, setTasks] = useState<any[]>([]);
-  const [form, setForm] = useState(blank);
+  const [team, setTeam] = useState<any[]>([]);
+  const [editing, setEditing] = useState<any>(null);
+  const [form, setForm] = useState({ ...blank, assignee: user?.id || "" });
   const load = async () => {
-    const { data, error } = await supabase
-      .from("b2g_tasks" as any)
-      .select("*")
-      .eq("lead_id", leadId)
-      .eq("task_type", "follow_up")
-      .order("due_at", { ascending: false });
-    if (!error) setTasks(data || []);
+    const [taskResult, profileResult] = await Promise.all([
+      supabase
+        .from("b2g_tasks" as any)
+        .select("*")
+        .eq("lead_id", leadId)
+        .eq("task_type", "follow_up")
+        .order("due_at", { ascending: false }),
+      supabase.from("profiles").select("user_id,full_name"),
+    ]);
+    if (!taskResult.error) setTasks(taskResult.data || []);
+    setTeam((profileResult.data as any[]) || []);
   };
   useEffect(() => {
     load();
   }, [leadId]);
+  useEffect(() => {
+    setForm((current) =>
+      current.assignee ? current : { ...current, assignee: user?.id || "" },
+    );
+  }, [user?.id]);
+  const isOther = form.assignee === "other";
   const create = async () => {
-    const { error } = await supabase
-      .from("b2g_tasks" as any)
-      .insert({
-        lead_id: leadId,
-        task_type: "follow_up",
-        title: form.title,
-        responsible_person: form.responsible_person,
-        due_at: form.due_at,
-        escalation_level: Number(form.escalation_level),
-        assigned_to: user?.id,
-        created_by: user?.id,
-      });
+    const member = team.find((entry) => entry.user_id === form.assignee);
+    const owner = isOther ? form.other_person.trim() : member?.full_name || "";
+    const { error } = await supabase.from("b2g_tasks" as any).insert({
+      lead_id: leadId,
+      task_type: "follow_up",
+      title: form.title.trim(),
+      responsible_person: owner,
+      due_at: new Date(form.due_at).toISOString(),
+      escalation_level: Number(form.escalation_level),
+      assigned_to: isOther ? user?.id : form.assignee || user?.id,
+      created_by: user?.id,
+    });
     if (error)
       return toast({
         title: "Follow-up not saved",
@@ -70,9 +90,9 @@ export default function LeadFollowUpManager({
       });
     await supabase
       .from("b2g_leads" as any)
-      .update({ next_follow_up_at: form.due_at })
+      .update({ next_follow_up_at: new Date(form.due_at).toISOString() })
       .eq("id", leadId);
-    setForm(blank);
+    setForm({ ...blank, assignee: user?.id || "" });
     await load();
     onChanged?.();
     toast({ title: "Follow-up assigned" });
@@ -92,6 +112,11 @@ export default function LeadFollowUpManager({
       });
     await load();
   };
+  const ready =
+    form.title.trim() &&
+    form.due_at &&
+    form.assignee &&
+    (!isOther || form.other_person.trim());
   return (
     <Card className="border-0 shadow-sm">
       <CardContent className="p-5">
@@ -100,48 +125,86 @@ export default function LeadFollowUpManager({
           <h2 className="font-bold">Follow-up responsibility</h2>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Complete record of ownership, due dates, escalation and completion
+          Write what has to be done, choose who will do it and when it is due.
+          It appears in Tasks & reminders for that person.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Input
-            placeholder="Next action / follow-up"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-          />
-          <Input
-            placeholder="Responsible person"
-            value={form.responsible_person}
-            onChange={(e) =>
-              setForm({ ...form, responsible_person: e.target.value })
-            }
-          />
-          <Input
-            type="datetime-local"
-            value={form.due_at}
-            onChange={(e) => setForm({ ...form, due_at: e.target.value })}
-          />
-          <Select
-            value={form.escalation_level}
-            onValueChange={(v) => setForm({ ...form, escalation_level: v })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[0, 1, 2, 3].map((v) => (
-                <SelectItem key={v} value={String(v)}>
-                  {levelName(v)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              What is to be done
+            </span>
+            <Input
+              placeholder="e.g. Send revised quotation"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              Assign to
+            </span>
+            <Select
+              value={form.assignee}
+              onValueChange={(v) => setForm({ ...form, assignee: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select team member" />
+              </SelectTrigger>
+              <SelectContent>
+                {team.map((member) => (
+                  <SelectItem key={member.user_id} value={member.user_id}>
+                    {member.full_name}
+                    {member.user_id === user?.id ? " (me)" : ""}
+                  </SelectItem>
+                ))}
+                {!team.some((member) => member.user_id === user?.id) && (
+                  <SelectItem value={user?.id || "me"}>Me</SelectItem>
+                )}
+                <SelectItem value="other">Someone else…</SelectItem>
+              </SelectContent>
+            </Select>
+            {isOther && (
+              <Input
+                placeholder="Person's name"
+                value={form.other_person}
+                onChange={(e) =>
+                  setForm({ ...form, other_person: e.target.value })
+                }
+              />
+            )}
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              Due date & time
+            </span>
+            <Input
+              type="datetime-local"
+              value={form.due_at}
+              onChange={(e) => setForm({ ...form, due_at: e.target.value })}
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              Urgency
+            </span>
+            <Select
+              value={form.escalation_level}
+              onValueChange={(v) => setForm({ ...form, escalation_level: v })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[0, 1, 2, 3].map((v) => (
+                  <SelectItem key={v} value={String(v)}>
+                    {levelName(v)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
         </div>
-        <Button
-          className="mt-3"
-          size="sm"
-          disabled={!form.title || !form.responsible_person || !form.due_at}
-          onClick={create}
-        >
+        <Button className="mt-3" size="sm" disabled={!ready} onClick={create}>
           <Plus className="mr-1 h-4 w-4" />
           Assign follow-up
         </Button>
@@ -169,23 +232,33 @@ export default function LeadFollowUpManager({
                     {new Date(task.due_at).toLocaleString("en-IN")}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => toggle(task)}
-                >
-                  {task.completed_at ? (
-                    <>
-                      <RotateCcw className="mr-1 h-3.5 w-3.5" />
-                      Reopen
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                      Mark complete
-                    </>
-                  )}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditing(task)}
+                  >
+                    <Pencil className="mr-1 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => toggle(task)}
+                  >
+                    {task.completed_at ? (
+                      <>
+                        <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                        Reopen
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                        Mark complete
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
@@ -196,6 +269,14 @@ export default function LeadFollowUpManager({
           )}
         </div>
       </CardContent>
+      <TaskEditDialog
+        task={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          load();
+          onChanged?.();
+        }}
+      />
     </Card>
   );
 }
