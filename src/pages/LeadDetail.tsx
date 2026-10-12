@@ -37,6 +37,7 @@ import { SHOW_AUTOMATION } from "@/lib/features";
 import {
   CLOSED_STAGES,
   LOST_REASONS,
+  fromCampaign,
   leadState,
   sourceLabel,
 } from "@/lib/leadOptions";
@@ -47,6 +48,7 @@ import {
   CalendarClock,
   IndianRupee,
   Mail,
+  Megaphone,
   MessageCircle,
   Pencil,
   Phone,
@@ -199,6 +201,16 @@ export default function LeadDetail() {
   };
   if (!lead) return <div className="p-8">Loading opportunity…</div>;
   const state = leadState(lead);
+  const gstRate = Number(lead.proposal_gst_rate || 0);
+  const proposalTotal =
+    Math.round(Number(lead.proposal_value || 0) * (1 + gstRate / 100) * 100) /
+    100;
+  const commercialPatch = (value: number, rate: number) => ({
+    proposal_value: value,
+    proposal_gst_rate: rate,
+    total_amount: Math.round(value * (1 + rate / 100) * 100) / 100,
+    expected_revenue: (value * Number(lead.probability)) / 100,
+  });
   return (
     <div className="min-h-full bg-slate-50/60 p-4 md:p-7">
       <button
@@ -208,6 +220,15 @@ export default function LeadDetail() {
         <ArrowLeft className="h-4 w-4" />
         Opportunities
       </button>
+      {fromCampaign(lead) && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-700">
+          <Megaphone className="h-4 w-4" />
+          <span>Exported from campaign: {lead.campaign_name}</span>
+          <span>
+            · Event: {lead.event_name || lead.campaign_name}
+          </span>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
         <div className="flex gap-3">
           <div className="h-12 w-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
@@ -420,18 +441,14 @@ export default function LeadDetail() {
                     }
                   />
                 </DecisionField>
-                <DecisionField label="Proposal amount">
+                <DecisionField label="Proposal amount (before GST)">
                   <Input
                     type="number"
                     defaultValue={lead.proposal_value || 0}
                     onBlur={(e) =>
-                      update({
-                        proposal_value: Number(e.target.value || 0),
-                        expected_revenue:
-                          (Number(e.target.value || 0) *
-                            Number(lead.probability)) /
-                          100,
-                      })
+                      update(
+                        commercialPatch(Number(e.target.value || 0), gstRate),
+                      )
                     }
                   />
                 </DecisionField>
@@ -640,9 +657,48 @@ export default function LeadDetail() {
                 Commercials
               </h2>
               <p className="text-2xl font-extrabold mt-4">
-                {money(lead.proposal_value)}
+                {money(proposalTotal)}
               </p>
-              <p className="text-xs text-muted-foreground">Proposal value</p>
+              <p className="text-xs text-muted-foreground">
+                Total with GST
+              </p>
+              <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Proposal value (before GST)
+                  </span>
+                  <span className="font-semibold">
+                    {money(lead.proposal_value)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">GST</span>
+                  <Select
+                    value={String(gstRate)}
+                    onValueChange={(v) =>
+                      update(
+                        commercialPatch(
+                          Number(lead.proposal_value || 0),
+                          Number(v),
+                        ),
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-32 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from(new Set([0, 5, 12, 18, 28, gstRate])).map(
+                        (x) => (
+                          <SelectItem key={x} value={String(x)}>
+                            {x === 0 ? "No GST" : `GST ${x}%`}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="mt-4">
                 <label className="text-xs text-muted-foreground">
                   Probability
@@ -682,20 +738,18 @@ export default function LeadDetail() {
               </p>
               <div className="mt-5 space-y-3 border-t pt-4">
                 <h3 className="text-sm font-bold">Fund flow</h3>
-                <label className="block">
+                <div>
                   <span className="text-xs text-muted-foreground">
-                    Total amount (agreed order value)
+                    Total amount (proposal value incl. GST)
                   </span>
-                  <Input
-                    className="mt-1"
-                    type="number"
-                    min="0"
-                    defaultValue={lead.total_amount || 0}
-                    onBlur={(e) =>
-                      update({ total_amount: Number(e.target.value || 0) })
-                    }
-                  />
-                </label>
+                  <p className="mt-1 rounded-md border bg-slate-50 px-3 py-2 text-sm font-semibold">
+                    {money(proposalTotal)}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Same as the proposal total above — change the proposal value
+                    or GST to update it.
+                  </p>
+                </div>
                 <label className="block">
                   <span className="text-xs text-muted-foreground">
                     Amount received so far
@@ -712,13 +766,12 @@ export default function LeadDetail() {
                 </label>
                 <div className="rounded-xl bg-slate-50 p-3">
                   <p
-                    className={`font-bold ${Number(lead.total_amount) - Number(lead.received_amount) > 0 ? "text-rose-700" : "text-emerald-700"}`}
+                    className={`font-bold ${proposalTotal - Number(lead.received_amount || 0) > 0 ? "text-rose-700" : "text-emerald-700"}`}
                   >
                     {money(
                       Math.max(
                         0,
-                        Number(lead.total_amount || 0) -
-                          Number(lead.received_amount || 0),
+                        proposalTotal - Number(lead.received_amount || 0),
                       ),
                     )}
                   </p>
@@ -729,7 +782,7 @@ export default function LeadDetail() {
                     <div
                       className="h-full bg-emerald-500"
                       style={{
-                        width: `${Math.min(100, Number(lead.total_amount) > 0 ? (Number(lead.received_amount || 0) * 100) / Number(lead.total_amount) : 0)}%`,
+                        width: `${Math.min(100, proposalTotal > 0 ? (Number(lead.received_amount || 0) * 100) / proposalTotal : 0)}%`,
                       }}
                     />
                   </div>

@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Download, Plus, Search, Upload, Pencil } from 'lucide-react';
-import { leadState } from '@/lib/leadOptions';
+import { fromCampaign, inLeadsList, leadState } from '@/lib/leadOptions';
+import { Megaphone } from 'lucide-react';
 
 const nice = (v: string) => (v || '').replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\bPi\b/g, 'PI');
 const exportCsv = (rows: any[]) => {
@@ -58,6 +59,7 @@ export default function Leads() {
     () =>
       rows.filter(
         (x) =>
+          inLeadsList(x) &&
           (!pipelineFilter || x.pipeline === pipelineFilter) &&
           (!campaignFilter || x.campaign_name === campaignFilter) &&
           `${x.organization_name} ${x.contact_name} ${x.phone} ${x.industry}`.toLowerCase().includes(q.toLowerCase()),
@@ -123,6 +125,13 @@ export default function Leads() {
             return (
               <Card key={l.id} onClick={() => nav(`/leads/${l.id}`)} className="border-0 shadow-sm cursor-pointer">
                 <CardContent className="p-5">
+                  {fromCampaign(l) && (
+                    <div className="-mt-1 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-indigo-50 px-3 py-1.5 text-[11px] font-medium text-indigo-700">
+                      <Megaphone className="h-3 w-3" />
+                      <span>Exported from campaign: {l.campaign_name}</span>
+                      {(l.event_name || l.campaign_name) && <span>· Event: {l.event_name || l.campaign_name}</span>}
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <div>
                       <h3 className="font-bold">{l.organization_name}</h3>

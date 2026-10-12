@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Download, Eye, FileCheck2, Pencil, Plus, Send, Trash2 } from 'lucide-react';
 import { amountInWords } from '@/lib/amountInWords';
-import { calcInvoice, formatMoney, invoiceHtml, invoiceTotal, withGst, type CompanyInfo, type GstType, type InvoiceKind } from '@/lib/invoiceTemplate';
+import { calcInvoice, formatMoney, invoiceBalance, invoiceHtml, invoiceTotal, withGst, type CompanyInfo, type GstType, type InvoiceKind } from '@/lib/invoiceTemplate';
 import SendInvoiceDialog from '@/components/SendInvoiceDialog';
 
 type Item = { description: string; hsn_sac: string; amount: string };
@@ -27,9 +27,13 @@ const blankForm = () => ({
   gst_type: 'igst' as GstType,
   gst_rate: '18',
   bill_to_name: '',
+  bill_to_contact: '',
+  bill_to_gst: '',
   bill_to_phone: '',
   bill_to_email: '',
   bill_to_address: '',
+  advance: '',
+  payment_terms: '',
   items: [blankItem()],
 });
 
@@ -66,7 +70,7 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
     const select = type === 'tax' ? '*,b2g_leads(organization_name),companies(name),proforma_invoices(invoice_number)' : '*,b2g_leads(organization_name),companies(name)';
     const [invoices, stageLeads, settings] = await Promise.all([
       supabase.from(table as any).select(select).order('created_at', { ascending: false }),
-      supabase.from('b2g_leads' as any).select('id,organization_name,contact_name,phone,email,city,state,company_id').eq('stage', 'generate_pi').order('organization_name'),
+      supabase.from('b2g_leads' as any).select('id,organization_name,contact_name,phone,email,city,state,company_id,companies(gst_number)').eq('stage', 'generate_pi').order('organization_name'),
       supabase.from('invoice_company_settings' as any).select('*').limit(1).maybeSingle(),
     ]);
     if (invoices.error) toast({ title: `${label}s could not load`, description: invoices.error.message, variant: 'destructive' });
@@ -104,9 +108,13 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       gst_type: (row.gst_type || 'igst') as GstType,
       gst_rate: String(row.gst_rate ?? 18),
       bill_to_name: row.bill_to_name || '',
+      bill_to_contact: row.bill_to_contact || '',
+      bill_to_gst: row.bill_to_gst || '',
       bill_to_phone: row.bill_to_phone || '',
       bill_to_email: row.bill_to_email || '',
       bill_to_address: row.bill_to_address || '',
+      advance: Number(row.advance_adjustment) > 0 ? String(row.advance_adjustment) : '',
+      payment_terms: row.payment_terms || '',
       items: (row.line_items || []).length
         ? row.line_items.map((item: any) => ({
             description: item.description || '',
@@ -125,6 +133,8 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       ...current,
       lead_id: leadId,
       bill_to_name: lead?.organization_name || '',
+      bill_to_contact: lead?.contact_name || '',
+      bill_to_gst: lead?.companies?.gst_number || '',
       bill_to_phone: lead?.phone || '',
       bill_to_email: lead?.email || '',
       bill_to_address: [lead?.city, lead?.state].filter(Boolean).join(', '),
@@ -158,9 +168,13 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       sgst_amount: totals.sgst,
       amount_in_words: amountInWords(totals.total),
       bill_to_name: form.bill_to_name.trim() || null,
+      bill_to_contact: form.bill_to_contact.trim() || null,
+      bill_to_gst: form.bill_to_gst.trim().toUpperCase() || null,
       bill_to_phone: form.bill_to_phone.trim() || null,
       bill_to_email: form.bill_to_email.trim() || null,
       bill_to_address: form.bill_to_address.trim() || null,
+      advance_adjustment: Math.min(totals.total, Math.max(0, Number(form.advance) || 0)),
+      payment_terms: form.payment_terms.trim() || null,
     };
     setSaving(true);
     const result = editing
@@ -194,9 +208,13 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       sgst_amount: row.sgst_amount,
       amount_in_words: amountInWords(invoiceTotal(row)),
       bill_to_name: row.bill_to_name || row.b2g_leads?.organization_name || row.companies?.name || null,
+      bill_to_contact: row.bill_to_contact,
+      bill_to_gst: row.bill_to_gst,
       bill_to_phone: row.bill_to_phone,
       bill_to_email: row.bill_to_email,
       bill_to_address: row.bill_to_address,
+      advance_adjustment: row.advance_adjustment || 0,
+      payment_terms: row.payment_terms,
       created_by: user?.id,
     });
     setConverting('');
@@ -249,6 +267,9 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
                   <Badge variant="secondary" className="h-fit capitalize">{row.status}</Badge>
                 </div>
                 <p className="font-bold text-xl mt-4">{money(invoiceTotal(row))}</p>
+                {Number(row.advance_adjustment) > 0 && (
+                  <p className="text-xs text-amber-700 font-medium">Advance {money(Number(row.advance_adjustment))} · Balance {money(invoiceBalance(row).balance)}</p>
+                )}
                 <p className="text-xs text-muted-foreground">{row.line_items?.length || 0} item(s) · {row.gst_type === 'none' ? 'No GST' : row.gst_type === 'cgst_sgst' ? `CGST + SGST ${row.gst_rate}%` : `IGST ${row.gst_rate}%`}</p>
                 <div className="flex flex-wrap items-center gap-2 mt-4">
                   <Button size="icon" variant="outline" title="Preview" aria-label="Preview" onClick={() => setViewRow(row)}><Eye className="h-4 w-4" /></Button>
@@ -302,7 +323,9 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
             <div className="grid sm:grid-cols-2 gap-3">
               <Field label="Invoice number"><Input value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} /></Field>
               <Field label="Invoice date"><Input type="date" value={form.invoice_date} onChange={(e) => setForm({ ...form, invoice_date: e.target.value })} /></Field>
-              <Field label="Bill to name"><Input value={form.bill_to_name} onChange={(e) => setForm({ ...form, bill_to_name: e.target.value })} /></Field>
+              <Field label="Client / company name"><Input value={form.bill_to_name} onChange={(e) => setForm({ ...form, bill_to_name: e.target.value })} /></Field>
+              <Field label="Contact person"><Input value={form.bill_to_contact} onChange={(e) => setForm({ ...form, bill_to_contact: e.target.value })} /></Field>
+              <Field label="Client GST no."><Input value={form.bill_to_gst} onChange={(e) => setForm({ ...form, bill_to_gst: e.target.value })} placeholder="e.g. 27ABCDE1234F1Z5" /></Field>
               <Field label="Phone"><Input value={form.bill_to_phone} onChange={(e) => setForm({ ...form, bill_to_phone: e.target.value })} /></Field>
               <Field label="Email"><Input type="email" value={form.bill_to_email} onChange={(e) => setForm({ ...form, bill_to_email: e.target.value })} /></Field>
               <Field label="Address"><Textarea rows={2} value={form.bill_to_address} onChange={(e) => setForm({ ...form, bill_to_address: e.target.value })} /></Field>
@@ -348,6 +371,19 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
               )}
               <div className="flex justify-between font-bold text-base border-t pt-2"><span>Total</span><span>{money(totals.total)}</span></div>
               <p className="text-xs text-muted-foreground pt-1"><span className="font-semibold">Amount chargeable (in words):</span> {amountInWords(totals.total)}</p>
+            </div>
+
+            <div className="space-y-3 rounded-xl border bg-white p-4">
+              <h3 className="font-semibold">Payment terms</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Advance received (₹)"><Input type="number" min="0" value={form.advance} onChange={(e) => setForm({ ...form, advance: e.target.value })} placeholder="0" /></Field>
+                <div className="rounded-lg bg-amber-50 p-3">
+                  <p className="text-xs text-muted-foreground">Balance due</p>
+                  <p className="text-lg font-bold text-amber-700">{money(Math.max(0, totals.total - Math.min(totals.total, Number(form.advance) || 0)))}</p>
+                  <p className="text-[11px] text-muted-foreground">Total {money(totals.total)} − advance</p>
+                </div>
+              </div>
+              <Field label="Terms (optional)"><Textarea rows={2} value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })} placeholder="e.g. Balance payable within 7 days of approval" /></Field>
             </div>
           </div>
           <DialogFooter>

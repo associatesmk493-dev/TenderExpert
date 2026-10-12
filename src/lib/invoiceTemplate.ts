@@ -74,6 +74,13 @@ export const invoiceTotal = (input: any) => {
   return round2(Number(inv.subtotal || 0) + Number(inv.igst_amount || 0) + Number(inv.cgst_amount || 0) + Number(inv.sgst_amount || 0));
 };
 
+// Advance received against the invoice and what is still to be paid.
+export const invoiceBalance = (inv: any) => {
+  const total = invoiceTotal(inv);
+  const advance = Math.min(total, Math.max(0, Number(inv.advance_adjustment || 0)));
+  return { total, advance, balance: round2(total - advance) };
+};
+
 export const formatMoney = (n: number) =>
   new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
@@ -102,104 +109,150 @@ export function invoiceHtml(invoice: any, companyInput: Partial<CompanyInfo> | n
   }));
   const gstType: GstType = inv.gst_type || 'igst';
   const rate = Number(inv.gst_rate || 0);
-  const total = invoiceTotal(inv);
+  const { total, advance, balance } = invoiceBalance(inv);
+  const subtotal = Number(inv.subtotal || 0);
   const words = amountInWords(total);
   const title = kind === 'proforma' ? 'Proforma Invoice' : 'Tax Invoice';
 
-  const gstRows =
+  const taxRows =
     gstType === 'igst'
-      ? `<tr><td class="lbl">IGST (${rate}%)</td><td></td><td class="amt">${formatMoney(Number(inv.igst_amount))}</td></tr>`
+      ? [['IGST', rate, Number(inv.igst_amount)]]
       : gstType === 'cgst_sgst'
-      ? `<tr><td class="lbl">CGST (${rate / 2}%)</td><td></td><td class="amt">${formatMoney(Number(inv.cgst_amount))}</td></tr>
-         <tr><td class="lbl">SGST (${rate / 2}%)</td><td></td><td class="amt">${formatMoney(Number(inv.sgst_amount))}</td></tr>`
-      : '';
+      ? [
+          ['CGST', rate / 2, Number(inv.cgst_amount)],
+          ['SGST', rate / 2, Number(inv.sgst_amount)],
+        ]
+      : [];
 
   const header = company.logo_url
     ? `<img class="logo" src="${esc(company.logo_url)}" alt="${esc(company.company_name)}">`
     : `<div class="brand"><div class="amp">&amp;</div><div><div class="brand-name">${esc(company.company_name).toUpperCase()}</div><div class="brand-bar"></div><div class="tagline">${esc(company.tagline)}</div></div></div>`;
 
   const billLines = [
-    inv.bill_to_phone ? esc(inv.bill_to_phone) : '',
-    inv.bill_to_email ? esc(inv.bill_to_email) : '',
+    inv.bill_to_contact ? `<span class="muted">Attn:</span> ${esc(inv.bill_to_contact)}` : '',
     inv.bill_to_address ? multiline(inv.bill_to_address) : '',
+    inv.bill_to_phone ? `<span class="muted">Phone:</span> ${esc(inv.bill_to_phone)}` : '',
+    inv.bill_to_email ? `<span class="muted">Email:</span> ${esc(inv.bill_to_email)}` : '',
+    inv.bill_to_gst ? `<span class="muted">GST No:</span> <b>${esc(inv.bill_to_gst)}</b>` : '',
   ].filter(Boolean);
+
+  const paymentBox =
+    advance > 0 || inv.payment_terms
+      ? `<div class="box pay-box" style="flex:1">
+          <div class="box-label">Payment terms</div>
+          ${advance > 0 ? `<div class="pay-row"><span>Total amount</span><b>&#8377; ${formatMoney(total)}</b></div>
+          <div class="pay-row"><span>Advance received</span><b>&#8377; ${formatMoney(advance)}</b></div>
+          <div class="pay-row due"><span>Balance due</span><b>&#8377; ${formatMoney(balance)}</b></div>` : ''}
+          ${inv.payment_terms ? `<div class="terms-text">${multiline(inv.payment_terms)}</div>` : ''}
+        </div>`
+      : '';
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(inv.invoice_number)}</title>
 <style>
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { margin: 0; background: #e5e7eb; font-family: Arial, Helvetica, sans-serif; color: #1f2937; }
-  .page { font-family: Arial, Helvetica, sans-serif; color: #1f2937; position: relative; width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; padding: 40px 48px 190px; overflow: hidden; }
-  .deco-blue { position: absolute; top: -200px; right: -60px; width: 300px; height: 300px; border-radius: 50%; background: #1b4f9c; }
-  .deco-orange { position: absolute; top: -225px; right: -140px; width: 300px; height: 300px; border-radius: 50%; background: #f7941d; }
-  .header { position: relative; z-index: 2; margin-bottom: 30px; }
-  .logo { max-height: 84px; max-width: 420px; display: block; }
+  .page { font-family: Arial, Helvetica, sans-serif; color: #1f2937; width: 794px; min-height: 1120px; margin: 0 auto; background: #fff; display: flex; flex-direction: column; }
+  .topbar { height: 8px; background: linear-gradient(90deg, #1b4f9c 0%, #1b4f9c 80%, #f7941d 80%, #f7941d 100%); }
+  .content { flex: 1; padding: 30px 44px 18px; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .logo { max-height: 72px; max-width: 340px; display: block; }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .amp { width: 54px; height: 54px; border-radius: 50%; border: 4px solid #f7941d; color: #f7941d; font-weight: 800; font-size: 30px; display: flex; align-items: center; justify-content: center; }
-  .brand-name { font-size: 28px; font-weight: 800; color: #1b4f9c; letter-spacing: .5px; }
-  .brand-bar { height: 6px; background: #f7941d; margin: 3px 0; }
-  .tagline { font-size: 12px; font-weight: 700; color: #1b4f9c; }
-  .meta { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
-  .to-label { font-size: 12px; margin-bottom: 4px; }
-  .to-name { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
-  .to-line { font-size: 11px; line-height: 1.55; color: #374151; }
-  .meta-right { position: relative; z-index: 3; padding-top: 22px; text-align: right; font-size: 12px; }
-  .meta-right b { font-size: 12px; }
-  table.items { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  table.items th { background: #fde6c4; border: 1px solid #f3c88e; padding: 9px 10px; font-size: 11px; text-align: center; letter-spacing: .4px; }
-  table.items td { border: 1px solid #f3c88e; padding: 11px 10px; font-size: 12px; vertical-align: top; }
-  table.items td.hsn { text-align: center; }
-  table.items td.amt { text-align: right; white-space: nowrap; }
-  table.items td.lbl { font-weight: 600; }
-  table.items tr.total td { font-weight: 800; background: #fff8ee; }
-  .eoe { text-align: right; font-size: 11px; margin-top: 4px; }
-  .words-label { font-size: 12px; font-weight: 800; margin-top: 4px; }
-  .words { font-size: 12px; margin-top: 4px; min-height: 18px; }
-  .ids { margin-top: 26px; font-size: 12px; font-weight: 800; line-height: 1.9; }
-  .bottom { display: flex; justify-content: space-between; gap: 24px; margin-top: 18px; }
-  .pay-title { font-size: 12px; font-weight: 800; margin-bottom: 4px; }
+  .amp { width: 52px; height: 52px; border-radius: 50%; border: 4px solid #f7941d; color: #f7941d; font-weight: 800; font-size: 28px; display: flex; align-items: center; justify-content: center; }
+  .brand-name { font-size: 24px; font-weight: 800; color: #1b4f9c; letter-spacing: .5px; }
+  .brand-bar { height: 5px; background: #f7941d; margin: 3px 0; }
+  .tagline { font-size: 11px; font-weight: 700; color: #1b4f9c; }
+  .doc { text-align: right; }
+  .doc h1 { margin: 0; font-size: 24px; letter-spacing: 1.5px; color: #1b4f9c; text-transform: uppercase; }
+  .doc .no { margin-top: 8px; font-size: 12px; font-weight: 700; }
+  .doc .dt { margin-top: 3px; font-size: 12px; color: #4b5563; }
+  .strip { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 16px; padding: 9px 0; border-top: 2px solid #f7941d; border-bottom: 1px solid #e5e7eb; font-size: 10px; color: #4b5563; }
+  .strip b { color: #1f2937; }
+  .boxes { display: flex; gap: 16px; margin-top: 18px; }
+  .box { flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; background: #fafbfd; }
+  .box-label { margin-bottom: 7px; font-size: 9.5px; font-weight: 700; letter-spacing: .9px; color: #1b4f9c; text-transform: uppercase; }
+  .to-name { margin-bottom: 4px; font-size: 15px; font-weight: 800; color: #111827; }
+  .line { font-size: 11px; line-height: 1.6; color: #374151; }
+  .muted { color: #6b7280; }
+  table.items { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  table.items th { padding: 9px 10px; background: #fde6c4; border-bottom: 2px solid #f3c88e; color: #7a4a0a; font-size: 10px; letter-spacing: .7px; text-align: left; }
+  table.items td { padding: 11px 10px; border-bottom: 1px solid #eceff3; font-size: 11.5px; vertical-align: top; }
+  table.items th.c, table.items td.c { text-align: center; }
+  table.items th.r, table.items td.r { text-align: right; white-space: nowrap; }
+  table.items tr { page-break-inside: avoid; }
+  .summary { display: flex; gap: 22px; margin-top: 16px; align-items: flex-start; }
+  .words { flex: 1; padding: 12px 14px; border: 1px dashed #d1d5db; border-radius: 8px; }
+  .words .lbl { font-size: 9.5px; font-weight: 700; letter-spacing: .9px; color: #1b4f9c; text-transform: uppercase; }
+  .words .txt { margin-top: 6px; font-size: 12px; font-weight: 700; line-height: 1.5; }
+  .words .eoe { margin-top: 8px; font-size: 10px; color: #6b7280; }
+  .totals { width: 260px; }
+  .totals .row { display: flex; justify-content: space-between; padding: 6px 2px; border-bottom: 1px solid #eceff3; font-size: 11.5px; }
+  .totals .grand { display: flex; justify-content: space-between; margin-top: 8px; padding: 10px 12px; border-radius: 6px; background: #1b4f9c; color: #fff; font-size: 14px; font-weight: 800; }
+  .lower { display: flex; gap: 16px; margin-top: 18px; }
   .pay { font-size: 11px; line-height: 1.75; }
-  .sign { text-align: right; font-size: 11px; font-weight: 800; display: flex; flex-direction: column; justify-content: space-between; min-height: 110px; }
-  .terms { margin-top: 18px; font-size: 10px; line-height: 1.5; color: #4b5563; }
-  .footer { position: absolute; left: 0; right: 0; bottom: 0; }
-  .computer { text-align: center; font-size: 10px; font-weight: 800; margin-bottom: 10px; }
-  .contacts { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 22px; padding: 0 48px 12px; font-size: 10.5px; font-weight: 700; color: #1b4f9c; }
-  .contacts span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #f7941d; margin-right: 6px; }
-  .band { position: relative; height: 34px; background: #1b4f9c; overflow: hidden; }
-  .band::after { content: ''; position: absolute; right: -40px; bottom: -70px; width: 220px; height: 130px; border-radius: 50%; background: #f7941d; }
-  @media print { body { background: #fff; } .page { margin: 0; } }
+  .pay b { display: inline-block; min-width: 92px; font-weight: 600; color: #6b7280; }
+  .ids { margin-top: 8px; padding-top: 8px; border-top: 1px solid #eceff3; font-size: 11px; font-weight: 800; line-height: 1.7; }
+  .pay-box { background: #fffaf2; border-color: #f3c88e; }
+  .pay-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11.5px; }
+  .pay-row.due { margin-top: 4px; padding-top: 7px; border-top: 1px solid #f3c88e; font-size: 13px; color: #b45309; }
+  .terms-text { margin-top: 8px; font-size: 10.5px; line-height: 1.55; color: #4b5563; }
+  .sign { display: flex; flex-direction: column; justify-content: space-between; min-height: 140px; text-align: right; font-size: 11px; font-weight: 700; }
+  .sign .line-sign { margin-top: auto; padding-top: 6px; border-top: 1px solid #9ca3af; }
+  .terms { margin-top: 16px; font-size: 10px; line-height: 1.55; color: #4b5563; }
+  .footer { margin-top: auto; }
+  .computer { padding-bottom: 8px; text-align: center; font-size: 9.5px; font-weight: 700; color: #6b7280; }
+  .contacts { display: flex; justify-content: center; flex-wrap: wrap; gap: 5px 20px; padding: 0 44px 12px; font-size: 10px; font-weight: 700; color: #1b4f9c; }
+  .contacts span::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #f7941d; }
+  .band { height: 8px; background: linear-gradient(90deg, #f7941d 0%, #f7941d 20%, #1b4f9c 20%, #1b4f9c 100%); }
+  @media print { body { background: #fff; } }
 </style></head><body><div class="page">
-  <div class="deco-blue"></div><div class="deco-orange"></div>
-  <div class="header">${header}</div>
-  <div class="meta">
-    <div>
-      <div class="to-label">${title} to :</div>
-      <div class="to-name">${esc(inv.bill_to_name || inv.b2g_leads?.organization_name || inv.companies?.name || 'Client')}</div>
-      <div class="to-line">${billLines.join('<br>')}</div>
+  <div class="topbar"></div>
+  <div class="content">
+    <div class="head">
+      <div>${header}</div>
+      <div class="doc"><h1>${title}</h1><div class="no">No. ${esc(inv.invoice_number)}</div><div class="dt">Date: ${formatDate(inv.invoice_date)}</div></div>
     </div>
-    <div class="meta-right"><div><b>Invoice no : ${esc(inv.invoice_number)}</b></div><div style="margin-top:6px">${formatDate(inv.invoice_date)}</div></div>
-  </div>
-  <table class="items">
-    <tr><th>DESCRIPTION</th><th style="width:140px">HSN / SAC</th><th style="width:160px">AMOUNT</th></tr>
-    ${items.map((item) => `<tr><td>${multiline(item.description)}</td><td class="hsn">${esc(item.hsn_sac)}</td><td class="amt">${formatMoney(item.amount)}</td></tr>`).join('')}
-    ${gstRows}
-    <tr class="total"><td>TOTAL</td><td></td><td class="amt">&#8377; ${formatMoney(total)}</td></tr>
-  </table>
-  <div class="eoe">E. &amp; O.E</div>
-  <div class="words-label">Amount Chargeable (in Words)</div>
-  <div class="words">${esc(words)}</div>
-  <div class="ids"><div>GST No : ${esc(company.gst_number)}</div><div>PAN No : ${esc(company.pan_number)}</div></div>
-  <div class="bottom">
-    <div>
-      <div class="pay-title">Payment info:</div>
-      <div class="pay">Account Name: ${esc(company.account_name)}<br>Account No: ${esc(company.account_number)}<br>IFSC No.: ${esc(company.ifsc_code)}<br>Bank Name: ${esc(company.bank_name)}<br>Branch : ${esc(company.bank_branch)}</div>
+    <div class="strip"><span>${esc(company.address)}</span><span><b>GST</b> ${esc(company.gst_number)}</span><span><b>PAN</b> ${esc(company.pan_number)}</span></div>
+
+    <div class="boxes">
+      <div class="box">
+        <div class="box-label">${title} to</div>
+        <div class="to-name">${esc(inv.bill_to_name || inv.b2g_leads?.organization_name || inv.companies?.name || 'Client')}</div>
+        <div class="line">${billLines.join('<br>')}</div>
+      </div>
     </div>
-    <div class="sign"><div>for ${esc(company.company_name)}</div><div>Authorised Signatory</div></div>
+
+    <table class="items">
+      <tr><th class="c" style="width:46px">S.NO</th><th>DESCRIPTION</th><th class="c" style="width:120px">HSN / SAC</th><th class="r" style="width:140px">AMOUNT (&#8377;)</th></tr>
+      ${items.map((item, index) => `<tr><td class="c">${index + 1}</td><td>${multiline(item.description)}</td><td class="c">${esc(item.hsn_sac)}</td><td class="r">${formatMoney(item.amount)}</td></tr>`).join('')}
+    </table>
+
+    <div class="summary">
+      <div class="words">
+        <div class="lbl">Amount chargeable (in words)</div>
+        <div class="txt">${esc(words)}</div>
+        <div class="eoe">E. &amp; O.E</div>
+      </div>
+      <div class="totals">
+        <div class="row"><span>Sub total</span><span>${formatMoney(subtotal)}</span></div>
+        ${taxRows.map(([name, pct, amount]) => `<div class="row"><span>${name} (${pct}%)</span><span>${formatMoney(Number(amount))}</span></div>`).join('')}
+        <div class="grand"><span>TOTAL</span><span>&#8377; ${formatMoney(total)}</span></div>
+      </div>
+    </div>
+
+    <div class="lower">
+      <div class="box" style="flex:1.25">
+        <div class="box-label">Payment info</div>
+        <div class="pay"><b>Account name</b>${esc(company.account_name)}<br><b>Account no</b>${esc(company.account_number)}<br><b>IFSC</b>${esc(company.ifsc_code)}<br><b>Bank</b>${esc(company.bank_name)}<br><b>Branch</b>${esc(company.bank_branch)}</div>
+      </div>
+      ${paymentBox}
+      <div class="sign" style="flex:0.9"><div>for ${esc(company.company_name)}</div><div class="line-sign">Authorised Signatory</div></div>
+    </div>
+    ${company.terms_conditions ? `<div class="terms"><b>Terms &amp; Conditions</b><br>${multiline(company.terms_conditions)}</div>` : ''}
   </div>
-  ${company.terms_conditions ? `<div class="terms"><b>Terms &amp; Conditions</b><br>${multiline(company.terms_conditions)}</div>` : ''}
   <div class="footer">
     <div class="computer">This is a Computer Generated Invoice</div>
-    <div class="contacts"><span>${esc(company.address)}</span><span>${esc(company.phone)}</span><span>${esc(company.email)}</span><span>${esc(company.website)}</span></div>
+    <div class="contacts"><span>${esc(company.phone)}</span><span>${esc(company.email)}</span><span>${esc(company.website)}</span></div>
     <div class="band"></div>
   </div>
 </div></body></html>`;

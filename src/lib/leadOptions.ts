@@ -57,7 +57,14 @@ export const LOST_REASONS = [
   'other',
 ];
 
-export const CLOSED_STAGES = ['closed', 'completed', 'final_payment_received'];
+// Leads that arrived through a campaign stay in Campaigns until someone marks them interested.
+export const inLeadsList = (lead: { campaign_name?: string | null; campaign_interested?: boolean | null }) =>
+  !lead.campaign_name || Boolean(lead.campaign_interested);
+
+export const fromCampaign = (lead: { campaign_name?: string | null; campaign_interested?: boolean | null }) =>
+  Boolean(lead.campaign_name && lead.campaign_interested);
+
+export const CLOSED_STAGES =['closed', 'completed', 'final_payment_received'];
 
 // A lead is "lost" when a lost reason is recorded; "closed" when it finished normally.
 export const leadState = (lead: { lost_reason_code?: string | null; closed_at?: string | null; stage?: string }) =>

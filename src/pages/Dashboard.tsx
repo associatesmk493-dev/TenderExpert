@@ -6,11 +6,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import MarginAnalytics from '@/pages/MarginAnalytics';
-import { leadState } from '@/lib/leadOptions';
+import { inLeadsList, leadState } from '@/lib/leadOptions';
 import { SHOW_AUTOMATION } from '@/lib/features';
 import { ArrowRight, BadgeIndianRupee, BrainCircuit, CalendarClock, Flame, Target, TrendingUp, Users } from 'lucide-react';
 
-type Lead = { id:string; organization_name:string; contact_name:string; pipeline:string; stage:string; heat:string; ai_score:number; proposal_value:number; expected_revenue:number; next_follow_up_at:string|null; next_best_action:string|null; assigned_to:string|null; closed_at:string|null; lost_reason_code:string|null };
+type Lead = { id:string; organization_name:string; contact_name:string; pipeline:string; stage:string; heat:string; ai_score:number; proposal_value:number; expected_revenue:number; next_follow_up_at:string|null; next_best_action:string|null; assigned_to:string|null; closed_at:string|null; lost_reason_code:string|null; campaign_name?:string|null; campaign_interested?:boolean|null };
 type Payment = { amount:number; gst_amount:number; amount_received:number; due_date:string|null; status:string };
 type Collection = { milestone_id:string; client:string; project_name:string|null; balance_outstanding:number; due_date:string|null; person_responsible:string|null };
 type TeamProfile = { user_id:string; full_name:string|null };
@@ -19,18 +19,19 @@ const money = (n:number) => new Intl.NumberFormat('en-IN',{style:'currency',curr
 const pipelineLabel:Record<string,string> = { brand_approval:'Brand Approval', government_business_development:'Govt. Business Development', tender_consultancy:'Tender Consultancy' };
 const pipelineColor:Record<string,string> = { brand_approval:'bg-indigo-500', government_business_development:'bg-emerald-500', tender_consultancy:'bg-amber-500' };
 
+const LEAD_COLUMNS='id,organization_name,contact_name,pipeline,stage,heat,ai_score,proposal_value,expected_revenue,next_follow_up_at,next_best_action,assigned_to,closed_at,lost_reason_code';
 export default function Dashboard(){
   const { profile, user } = useAuth(); const navigate=useNavigate();
   const [leads,setLeads]=useState<Lead[]>([]); const [payments,setPayments]=useState<Payment[]>([]); const [profiles,setProfiles]=useState<TeamProfile[]>([]); const [tasks,setTasks]=useState<FollowUpTask[]>([]); const [collections,setCollections]=useState<Collection[]>([]); const [loading,setLoading]=useState(true);
   useEffect(()=>{ (async()=>{ const [l,p,t,f,c]=await Promise.all([
-    supabase.from('b2g_leads' as any).select('id,organization_name,contact_name,pipeline,stage,heat,ai_score,proposal_value,expected_revenue,next_follow_up_at,next_best_action,assigned_to,closed_at,lost_reason_code').order('created_at',{ascending:false}),
+    supabase.from('b2g_leads' as any).select(`${LEAD_COLUMNS},campaign_name,campaign_interested`).order('created_at',{ascending:false}),
     supabase.from('b2g_payment_milestones' as any).select('amount,gst_amount,amount_received,due_date,status'),
     supabase.from('profiles').select('user_id,full_name'),
     supabase.from('b2g_tasks' as any).select('id,lead_id,due_at,completed_at').eq('task_type','follow_up').is('completed_at',null),
     supabase.from('b2g_collection_dashboard' as any).select('milestone_id,client,project_name,balance_outstanding,due_date,person_responsible')
-  ]); if(SHOW_AUTOMATION)await supabase.rpc('refresh_b2g_escalations' as any); setLeads((l.data||[]) as unknown as Lead[]); setPayments((p.data||[]) as unknown as Payment[]); setProfiles((t.data||[]) as TeamProfile[]); setTasks((f.data||[]) as unknown as FollowUpTask[]); setCollections((c.data||[]) as unknown as Collection[]); setLoading(false); })(); },[]);
+  ]); let leadRows:any=l.data; if(l.error){const retry=await supabase.from('b2g_leads' as any).select(LEAD_COLUMNS).order('created_at',{ascending:false});leadRows=retry.data} if(SHOW_AUTOMATION)await supabase.rpc('refresh_b2g_escalations' as any); setLeads((leadRows||[]) as unknown as Lead[]); setPayments((p.data||[]) as unknown as Payment[]); setProfiles((t.data||[]) as TeamProfile[]); setTasks((f.data||[]) as unknown as FollowUpTask[]); setCollections((c.data||[]) as unknown as Collection[]); setLoading(false); })(); },[]);
   const today=new Date().toISOString().slice(0,10);
-  const activeLeads=useMemo(()=>leads.filter(l=>leadState(l)==='active'),[leads]);
+  const activeLeads=useMemo(()=>leads.filter(l=>inLeadsList(l)&&leadState(l)==='active'),[leads]);
   const stats=useMemo(()=>({ active:activeLeads.length, hot:activeLeads.filter(l=>l.heat==='hot').length, followups:activeLeads.filter(l=>l.next_follow_up_at?.slice(0,10)===today).length, overdue:tasks.filter(task=>task.due_at.slice(0,10)<today).length, proposal:activeLeads.reduce((a,l)=>a+Number(l.proposal_value),0), expected:activeLeads.reduce((a,l)=>a+Number(l.expected_revenue),0), outstanding:payments.reduce((a,p)=>a+Math.max(0,Number(p.amount)+Number(p.gst_amount)-Number(p.amount_received)),0), collected:payments.reduce((a,p)=>a+Number(p.amount_received),0) }),[activeLeads,payments,tasks,today]);
   const priority=[...activeLeads].filter(l=>l.heat==='hot'||l.ai_score>=70||(l.next_follow_up_at?.slice(0,10)||'9999')<=today).sort((a,b)=>b.ai_score-a.ai_score).slice(0,5);
   const paymentsDue=[...collections].filter(c=>Number(c.balance_outstanding)>0).sort((a,b)=>(a.due_date||'9999-99-99').localeCompare(b.due_date||'9999-99-99')).slice(0,6);

@@ -9,13 +9,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Copy, Download, Mail, MessageCircle, Save, Send, Share2 } from 'lucide-react';
-import { formatMoney, invoiceHtml, invoiceTotal, mergeCompany, type CompanyInfo, type InvoiceKind } from '@/lib/invoiceTemplate';
+import { formatMoney, invoiceBalance, invoiceHtml, invoiceTotal, mergeCompany, type CompanyInfo, type InvoiceKind } from '@/lib/invoiceTemplate';
 import { downloadBlob, invoiceToPngBlob } from '@/lib/invoiceImage';
 
 const DEFAULT_SUBJECT = '{{invoice_type}} {{invoice_number}} from {{company_name}}';
 const DEFAULT_BODY =
   'Dear {{client_name}},\n\nPlease find {{invoice_type}} {{invoice_number}} dated {{invoice_date}} for {{total_amount}}.\n\nKindly share the payment confirmation once done.\n\nRegards,\n{{salesperson_name}}\n{{company_name}}';
-const PLACEHOLDERS = ['client_name', 'company_name', 'invoice_type', 'invoice_number', 'invoice_date', 'due_date', 'total_amount', 'salesperson_name'];
+const PLACEHOLDERS = ['client_name', 'company_name', 'invoice_type', 'invoice_number', 'invoice_date', 'due_date', 'total_amount', 'advance_received', 'balance_due', 'salesperson_name'];
 
 const waNumber = (value: string) => {
   const digits = value.replace(/\D/g, '');
@@ -78,6 +78,8 @@ export default function SendInvoiceDialog({
       invoice_date: formatDate(invoice.invoice_date),
       due_date: formatDate(invoice.due_date) || 'on receipt',
       total_amount: `₹${formatMoney(invoiceTotal(invoice))}`,
+      advance_received: `₹${formatMoney(invoiceBalance(invoice).advance)}`,
+      balance_due: `₹${formatMoney(invoiceBalance(invoice).balance)}`,
       salesperson_name: profile?.full_name || user?.email?.split('@')[0] || '',
     };
   }, [invoice, company, kind, profile, user]);
