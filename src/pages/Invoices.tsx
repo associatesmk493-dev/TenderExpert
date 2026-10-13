@@ -15,6 +15,7 @@ import { Download, Eye, FileCheck2, Pencil, Plus, Send, Trash2 } from 'lucide-re
 import { amountInWords } from '@/lib/amountInWords';
 import { calcInvoice, formatMoney, invoiceBalance, invoiceHtml, invoiceTotal, withGst, type CompanyInfo, type GstType, type InvoiceKind } from '@/lib/invoiceTemplate';
 import SendInvoiceDialog from '@/components/SendInvoiceDialog';
+import InvoicePreviewFrame from '@/components/InvoicePreviewFrame';
 
 type Item = { description: string; hsn_sac: string; amount: string };
 const blankItem = (): Item => ({ description: '', hsn_sac: '', amount: '' });
@@ -298,7 +299,7 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       <Dialog open={viewRow !== null} onOpenChange={(value) => !value && setViewRow(null)}>
         <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{label} {viewRow?.invoice_number}</DialogTitle></DialogHeader>
-          {viewRow && <iframe title="Invoice preview" srcDoc={htmlFor(viewRow)} sandbox="" className="w-full h-[68vh] rounded-lg border bg-white" />}
+          {viewRow && <InvoicePreviewFrame html={htmlFor(viewRow)} />}
           {viewRow && (
             <DialogFooter className="gap-2 sm:gap-2">
               <Button variant="outline" onClick={() => openEdit(viewRow)}><Pencil className="h-4 w-4 mr-2" />Edit</Button>
