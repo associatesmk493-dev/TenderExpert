@@ -23,13 +23,21 @@ import {
 } from "@/components/ui/select";
 import TaskEditDialog from "@/components/TaskEditDialog";
 
-const blank = {
+const tomorrow = () => {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+};
+const blank = () => ({
   title: "",
   assignee: "",
   other_person: "",
-  due_at: "",
+  due_date: tomorrow(),
+  due_time: "10:00",
   escalation_level: "0",
-};
+});
 const levelName = (level: number) =>
   ["Normal", "Level 1", "Level 2", "Critical"][Math.min(level, 3)] ||
   `Level ${level}`;
@@ -46,7 +54,7 @@ export default function LeadFollowUpManager({
   const [tasks, setTasks] = useState<any[]>([]);
   const [team, setTeam] = useState<any[]>([]);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ ...blank, assignee: user?.id || "" });
+  const [form, setForm] = useState({ ...blank(), assignee: user?.id || "" });
   const load = async () => {
     const [taskResult, profileResult] = await Promise.all([
       supabase
@@ -72,12 +80,19 @@ export default function LeadFollowUpManager({
   const create = async () => {
     const member = team.find((entry) => entry.user_id === form.assignee);
     const owner = isOther ? form.other_person.trim() : member?.full_name || "";
+    const dueAt = new Date(`${form.due_date}T${form.due_time || "10:00"}`);
+    if (Number.isNaN(dueAt.getTime())) {
+      return toast({
+        title: "Choose a valid due date",
+        variant: "destructive",
+      });
+    }
     const { error } = await supabase.from("b2g_tasks" as any).insert({
       lead_id: leadId,
       task_type: "follow_up",
       title: form.title.trim(),
       responsible_person: owner,
-      due_at: new Date(form.due_at).toISOString(),
+      due_at: dueAt.toISOString(),
       escalation_level: Number(form.escalation_level),
       assigned_to: isOther ? user?.id : form.assignee || user?.id,
       created_by: user?.id,
@@ -90,9 +105,9 @@ export default function LeadFollowUpManager({
       });
     await supabase
       .from("b2g_leads" as any)
-      .update({ next_follow_up_at: new Date(form.due_at).toISOString() })
+      .update({ next_follow_up_at: dueAt.toISOString() })
       .eq("id", leadId);
-    setForm({ ...blank, assignee: user?.id || "" });
+    setForm({ ...blank(), assignee: user?.id || "" });
     await load();
     onChanged?.();
     toast({ title: "Follow-up assigned" });
@@ -114,7 +129,7 @@ export default function LeadFollowUpManager({
   };
   const ready =
     form.title.trim() &&
-    form.due_at &&
+    form.due_date &&
     form.assignee &&
     (!isOther || form.other_person.trim());
   return (
@@ -177,11 +192,19 @@ export default function LeadFollowUpManager({
             <span className="text-xs font-medium text-muted-foreground">
               Due date & time
             </span>
-            <Input
-              type="datetime-local"
-              value={form.due_at}
-              onChange={(e) => setForm({ ...form, due_at: e.target.value })}
-            />
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <Input
+                type="date"
+                value={form.due_date}
+                onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+              />
+              <Input
+                type="time"
+                className="w-28"
+                value={form.due_time}
+                onChange={(e) => setForm({ ...form, due_time: e.target.value })}
+              />
+            </div>
           </label>
           <label className="space-y-1">
             <span className="text-xs font-medium text-muted-foreground">
@@ -204,10 +227,17 @@ export default function LeadFollowUpManager({
             </Select>
           </label>
         </div>
-        <Button className="mt-3" size="sm" disabled={!ready} onClick={create}>
-          <Plus className="mr-1 h-4 w-4" />
-          Assign follow-up
-        </Button>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button size="sm" disabled={!ready} onClick={create}>
+            <Plus className="mr-1 h-4 w-4" />
+            Assign follow-up
+          </Button>
+          {!ready && (
+            <span className="text-xs text-muted-foreground">
+              Fill “What is to be done”, who will do it, and the due date.
+            </span>
+          )}
+        </div>
         <div className="mt-5 space-y-2">
           {tasks.map((task) => (
             <div

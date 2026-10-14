@@ -4,6 +4,7 @@ import { FileClock, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { writeWithFallback } from "@/lib/writeWithFallback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,9 +48,11 @@ const blank = {
 export default function LeadQuotationTimeline({
   leadId,
   organizationName,
+  onChanged,
 }: {
   leadId: string;
   organizationName?: string;
+  onChanged?: () => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -128,12 +131,41 @@ export default function LeadQuotationTimeline({
       });
       return;
     }
+    // Keep the lead's commercials in step with the latest quotation.
+    let synced = false;
+    if (["draft", "sent", "viewed", "accepted"].includes(form.status)) {
+      const { data: current } = await supabase
+        .from("b2g_leads" as any)
+        .select("probability")
+        .eq("id", leadId)
+        .single();
+      const rate = Number(form.gst_rate) || 0;
+      const { result } = await writeWithFallback(
+        (body) =>
+          supabase
+            .from("b2g_leads" as any)
+            .update(body)
+            .eq("id", leadId),
+        {
+          proposal_value: subtotal,
+          proposal_gst_rate: rate,
+          total_amount: Math.round(subtotal * (1 + rate / 100) * 100) / 100,
+          expected_revenue:
+            (subtotal * Number((current as any)?.probability ?? 20)) / 100,
+        },
+      );
+      synced = !result.error;
+    }
     toast({
       title: nextVersion > 1 ? `Revision V${nextVersion} saved` : "Quotation saved",
+      description: synced
+        ? "Lead's proposal value and GST updated to match."
+        : undefined,
     });
     setOpen(false);
     setForm(blank);
     load();
+    onChanged?.();
   };
 
   return (

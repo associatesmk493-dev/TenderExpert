@@ -16,6 +16,7 @@ import { amountInWords } from '@/lib/amountInWords';
 import { calcInvoice, formatMoney, invoiceBalance, invoiceHtml, invoiceTotal, withGst, type CompanyInfo, type GstType, type InvoiceKind } from '@/lib/invoiceTemplate';
 import SendInvoiceDialog from '@/components/SendInvoiceDialog';
 import InvoicePreviewFrame from '@/components/InvoicePreviewFrame';
+import { skippedMessage, writeWithFallback } from '@/lib/writeWithFallback';
 
 type Item = { description: string; hsn_sac: string; amount: string };
 const blankItem = (): Item => ({ description: '', hsn_sac: '', amount: '' });
@@ -178,12 +179,16 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       payment_terms: form.payment_terms.trim() || null,
     };
     setSaving(true);
-    const result = editing
-      ? await supabase.from(table as any).update(payload).eq('id', editing.id)
-      : await supabase.from(table as any).insert({ ...payload, lead_id: form.lead_id, company_id: lead?.company_id ?? null, created_by: user?.id });
+    const { result, skipped } = await writeWithFallback(
+      (body) =>
+        editing
+          ? supabase.from(table as any).update(body).eq('id', editing.id)
+          : supabase.from(table as any).insert({ ...body, lead_id: form.lead_id, company_id: lead?.company_id ?? null, created_by: user?.id }),
+      payload,
+    );
     setSaving(false);
     if (result.error) return toast({ title: `${label} not saved`, description: result.error.message, variant: 'destructive' });
-    toast({ title: editing ? `${label} updated` : `${label} created` });
+    toast({ title: editing ? `${label} updated` : `${label} created`, description: skippedMessage(skipped) });
     setOpen(false);
     load();
   };
@@ -193,7 +198,7 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
     setConverting(row.id);
     const existing = await supabase.from('tax_invoices' as any).select('invoice_number');
     const number = nextNumber('TI', ((existing.data as any[]) || []).map((entry) => entry.invoice_number));
-    const { error } = await supabase.from('tax_invoices' as any).insert({
+    const { result: converted, skipped } = await writeWithFallback((body) => supabase.from('tax_invoices' as any).insert(body), {
       invoice_number: number,
       proforma_invoice_id: row.id,
       lead_id: row.lead_id,
@@ -219,8 +224,8 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       created_by: user?.id,
     });
     setConverting('');
-    if (error) return toast({ title: 'Tax invoice could not be created', description: error.message, variant: 'destructive' });
-    toast({ title: `Tax invoice ${number} created`, description: 'You can edit it from the Tax Invoices page.' });
+    if (converted.error) return toast({ title: 'Tax invoice could not be created', description: converted.error.message, variant: 'destructive' });
+    toast({ title: `Tax invoice ${number} created`, description: skippedMessage(skipped) || 'You can edit it from the Tax Invoices page.' });
     navigate('/tax-invoices');
   };
 

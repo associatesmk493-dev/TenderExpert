@@ -3,7 +3,7 @@ import LeadVoiceMeeting from "@/components/LeadVoiceMeeting";
 import LeadOrdersManager from "@/components/LeadOrdersManager";
 import LeadFollowUpManager from "@/components/LeadFollowUpManager";
 import LeadQuotationTimeline from "@/components/LeadQuotationTimeline";
-import LeadOpportunitySheet from "@/components/LeadOpportunitySheet";
+import LeadCallOutcome from "@/components/LeadCallOutcome";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import DictateButton from "@/components/DictateButton";
 import { SHOW_AUTOMATION } from "@/lib/features";
+import { skippedMessage, writeWithFallback } from "@/lib/writeWithFallback";
 import {
   CLOSED_STAGES,
   LOST_REASONS,
@@ -121,9 +121,11 @@ export default function LeadDetail() {
     { toast } = useToast();
   const [lead, setLead] = useState<any>(null),
     [acts, setActs] = useState<any[]>([]),
+    [meetings, setMeetings] = useState<any[]>([]),
+    [paymentsReceived, setPaymentsReceived] = useState(0),
     [note, setNote] = useState("");
   const load = async () => {
-    const [l, a] = await Promise.all([
+    const [l, a, m, p] = await Promise.all([
       supabase
         .from("b2g_leads" as any)
         .select("*")
@@ -134,27 +136,53 @@ export default function LeadDetail() {
         .select("*")
         .eq("lead_id", id)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("b2g_client_meetings" as any)
+        .select("id,transcript,meeting_at")
+        .eq("lead_id", id)
+        .order("meeting_at", { ascending: false }),
+      supabase
+        .from("b2g_projects" as any)
+        .select("b2g_payment_milestones(amount_received)")
+        .eq("lead_id", id),
     ]);
     setLead(l.data);
     setActs(a.data || []);
+    setMeetings((m.data as any[]) || []);
+    setPaymentsReceived(
+      ((p.data as any[]) || []).reduce(
+        (sum, project) =>
+          sum +
+          (project.b2g_payment_milestones || []).reduce(
+            (inner: number, milestone: any) =>
+              inner + Number(milestone.amount_received || 0),
+            0,
+          ),
+        0,
+      ),
+    );
   };
   useEffect(() => {
     load();
   }, [id]);
   const update = async (p: any) => {
-    const { error } = await supabase
-      .from("b2g_leads" as any)
-      .update(p)
-      .eq("id", id);
-    if (error)
+    const { result, skipped } = await writeWithFallback(
+      (body) =>
+        supabase
+          .from("b2g_leads" as any)
+          .update(body)
+          .eq("id", id),
+      p,
+    );
+    if (result.error)
       toast({
         title: "Update failed",
-        description: error.message,
+        description: result.error.message,
         variant: "destructive",
       });
     else {
       setLead((x: any) => ({ ...x, ...p }));
-      toast({ title: "Updated" });
+      toast({ title: "Updated", description: skippedMessage(skipped) });
     }
   };
   const addNote = async () => {
@@ -201,10 +229,26 @@ export default function LeadDetail() {
   };
   if (!lead) return <div className="p-8">Loading opportunity…</div>;
   const state = leadState(lead);
+  const timeline = [
+    ...acts,
+    ...meetings
+      .filter((m) => !acts.some((a) => a.description === m.transcript))
+      .map((m) => ({
+        id: `meeting-${m.id}`,
+        subject: "Meeting record",
+        description: m.transcript,
+        created_at: m.meeting_at,
+      })),
+  ].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
   const gstRate = Number(lead.proposal_gst_rate || 0);
   const proposalTotal =
     Math.round(Number(lead.proposal_value || 0) * (1 + gstRate / 100) * 100) /
     100;
+  const receivedShown =
+    paymentsReceived > 0 ? paymentsReceived : Number(lead.received_amount || 0);
   const commercialPatch = (value: number, rate: number) => ({
     proposal_value: value,
     proposal_gst_rate: rate,
@@ -371,19 +415,6 @@ export default function LeadDetail() {
               </div>
             </CardContent>
           </Card>
-          <Tabs defaultValue="overview" className="space-y-5">
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="opportunity">Opportunity sheet</TabsTrigger>
-            </TabsList>
-            <TabsContent
-              value="opportunity"
-              forceMount
-              className="mt-0 data-[state=inactive]:hidden"
-            >
-              <LeadOpportunitySheet lead={lead} update={update} />
-            </TabsContent>
-            <TabsContent value="overview" className="mt-0 space-y-5">
           <Card className="border-0 shadow-sm">
             <CardContent className="p-5">
               <h2 className="font-bold mb-4">Customer intelligence</h2>
@@ -566,6 +597,12 @@ export default function LeadDetail() {
               </div>
             </CardContent>
           </Card>
+          <LeadCallOutcome
+            lead={lead}
+            canScheduleMeetingStage={stages[lead.pipeline]?.includes("meeting_scheduled")}
+            update={update}
+            onSaved={load}
+          />
           <LeadFollowUpManager leadId={lead.id} onChanged={load} />
           <LeadOrdersManager
             leadId={lead.id}
@@ -574,6 +611,7 @@ export default function LeadDetail() {
           <LeadQuotationTimeline
             leadId={lead.id}
             organizationName={lead.organization_name}
+            onChanged={load}
           />
           <Card className="border-0 shadow-sm">
             <CardContent className="p-5">
@@ -588,7 +626,7 @@ export default function LeadDetail() {
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold">Activity & meeting notes</h2>
-                <Badge variant="secondary">{acts.length} records</Badge>
+                <Badge variant="secondary">{timeline.length} records</Badge>
               </div>
               <div className="flex gap-2 mt-4">
                 <Textarea
@@ -610,7 +648,7 @@ export default function LeadDetail() {
                 />
               </div>
               <div className="mt-5 space-y-3">
-                {acts.map((a) => (
+                {timeline.map((a) => (
                   <div
                     key={a.id}
                     className="border-l-2 border-primary/30 pl-4 py-1"
@@ -627,8 +665,6 @@ export default function LeadDetail() {
               </div>
             </CardContent>
           </Card>
-            </TabsContent>
-          </Tabs>
         </div>
         <div className="space-y-5">
           {SHOW_AUTOMATION && (
@@ -754,26 +790,32 @@ export default function LeadDetail() {
                   <span className="text-xs text-muted-foreground">
                     Amount received so far
                   </span>
-                  <Input
-                    className="mt-1"
-                    type="number"
-                    min="0"
-                    defaultValue={lead.received_amount || 0}
-                    onBlur={(e) =>
-                      update({ received_amount: Number(e.target.value || 0) })
-                    }
-                  />
+                  {paymentsReceived > 0 ? (
+                    <>
+                      <p className="mt-1 rounded-md border bg-slate-50 px-3 py-2 text-sm font-semibold">
+                        {money(paymentsReceived)}
+                      </p>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        Synced from payments recorded for this client's orders.
+                      </p>
+                    </>
+                  ) : (
+                    <Input
+                      className="mt-1"
+                      type="number"
+                      min="0"
+                      defaultValue={lead.received_amount || 0}
+                      onBlur={(e) =>
+                        update({ received_amount: Number(e.target.value || 0) })
+                      }
+                    />
+                  )}
                 </label>
                 <div className="rounded-xl bg-slate-50 p-3">
                   <p
-                    className={`font-bold ${proposalTotal - Number(lead.received_amount || 0) > 0 ? "text-rose-700" : "text-emerald-700"}`}
+                    className={`font-bold ${proposalTotal - receivedShown > 0 ? "text-rose-700" : "text-emerald-700"}`}
                   >
-                    {money(
-                      Math.max(
-                        0,
-                        proposalTotal - Number(lead.received_amount || 0),
-                      ),
-                    )}
+                    {money(Math.max(0, proposalTotal - receivedShown))}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
                     Balance payment
@@ -782,7 +824,7 @@ export default function LeadDetail() {
                     <div
                       className="h-full bg-emerald-500"
                       style={{
-                        width: `${Math.min(100, proposalTotal > 0 ? (Number(lead.received_amount || 0) * 100) / proposalTotal : 0)}%`,
+                        width: `${Math.min(100, proposalTotal > 0 ? (receivedShown * 100) / proposalTotal : 0)}%`,
                       }}
                     />
                   </div>

@@ -19,9 +19,9 @@ interface Campaign {
 
 const PAGE_SIZE = 50;
 const FILTERS = [
-  ['pending', 'Not reviewed'],
-  ['interested', 'Interested'],
   ['all', 'All'],
+  ['interested', 'Interested'],
+  ['na', 'NA'],
 ] as const;
 
 const colorPalette = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16'];
@@ -44,7 +44,7 @@ const Campaigns = () => {
   const [search, setSearch] = useState('');
 
   const [leads, setLeads] = useState<any[]>([]);
-  const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('pending');
+  const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
   const [leadSearch, setLeadSearch] = useState('');
   const [leadLoading, setLeadLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -91,8 +91,8 @@ const Campaigns = () => {
       .order('created_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
     if (!isAdmin) q = q.eq('assigned_to', user.id);
-    if (filter === 'pending') q = q.eq('campaign_interested', false);
     if (filter === 'interested') q = q.eq('campaign_interested', true);
+    if (filter === 'na') q = q.eq('campaign_na', true);
     const term = clean(leadSearch);
     if (term) q = q.or(`organization_name.ilike.%${term}%,contact_name.ilike.%${term}%,phone.ilike.%${term}%`);
     const { data, error } = await q;
@@ -100,7 +100,7 @@ const Campaigns = () => {
     if (error) {
       toast({
         title: 'Campaign leads could not load',
-        description: error.message.includes('campaign_interested') ? 'Run the latest database update (SQL) first.' : error.message,
+        description: /campaign_(interested|na)/.test(error.message) ? 'Run the latest database update (SQL) first.' : error.message,
         variant: 'destructive',
       });
       return;
@@ -114,12 +114,19 @@ const Campaigns = () => {
     if (selected) loadLeads(true);
   }, [selected, filter, leadSearch, user, isAdmin]);
 
-  const setInterested = async (lead: any, interested: boolean) => {
+  // status: 'interested' | 'na' | 'pending'
+  const setStatus = async (lead: any, status: 'interested' | 'na' | 'pending') => {
+    const interested = status === 'interested';
+    const patch = { campaign_interested: interested, campaign_na: status === 'na' };
     setBusyId(lead.id);
-    const { error } = await supabase.from('b2g_leads' as any).update({ campaign_interested: interested }).eq('id', lead.id);
+    const { error } = await supabase.from('b2g_leads' as any).update(patch).eq('id', lead.id);
     setBusyId('');
     if (error) {
-      toast({ title: 'Could not update', description: error.message, variant: 'destructive' });
+      toast({
+        title: 'Could not update',
+        description: /campaign_(interested|na)/.test(error.message) ? 'Run the latest database update (SQL) first.' : error.message,
+        variant: 'destructive',
+      });
       return;
     }
     if (interested) {
@@ -131,9 +138,12 @@ const Campaigns = () => {
         created_by: user?.id,
       });
     }
-    toast({ title: interested ? 'Added to Leads' : 'Removed from Leads', description: interested ? `${lead.organization_name} now appears in the Leads list.` : undefined });
+    toast({
+      title: interested ? 'Added to Leads' : status === 'na' ? 'Marked NA' : 'Moved back to review',
+      description: interested ? `${lead.organization_name} now appears in the Leads list.` : undefined,
+    });
     setLeads((current) =>
-      filter === 'all' ? current.map((row) => (row.id === lead.id ? { ...row, campaign_interested: interested } : row)) : current.filter((row) => row.id !== lead.id),
+      filter === 'all' ? current.map((row) => (row.id === lead.id ? { ...row, ...patch } : row)) : current.filter((row) => row.id !== lead.id),
     );
   };
 
@@ -186,6 +196,7 @@ const Campaigns = () => {
                     </p>
                   </div>
                   {lead.campaign_interested && <Badge className="shrink-0 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">In Leads</Badge>}
+                  {lead.campaign_na && <Badge variant="secondary" className="shrink-0">NA</Badge>}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                   {lead.phone && (
@@ -207,16 +218,26 @@ const Campaigns = () => {
                       <Button size="sm" variant="outline" onClick={() => navigate(`/leads/${lead.id}`)}>
                         Open lead
                       </Button>
-                      <Button size="sm" variant="ghost" disabled={busyId === lead.id} onClick={() => setInterested(lead, false)}>
+                      <Button size="sm" variant="ghost" disabled={busyId === lead.id} onClick={() => setStatus(lead, 'pending')}>
                         <Undo2 className="h-3.5 w-3.5 mr-1" />
                         Remove from Leads
                       </Button>
                     </>
-                  ) : (
-                    <Button size="sm" disabled={busyId === lead.id} onClick={() => setInterested(lead, true)}>
-                      <ThumbsUp className="h-3.5 w-3.5 mr-1.5" />
-                      Interested
+                  ) : lead.campaign_na ? (
+                    <Button size="sm" variant="outline" disabled={busyId === lead.id} onClick={() => setStatus(lead, 'pending')}>
+                      <Undo2 className="h-3.5 w-3.5 mr-1" />
+                      Undo NA
                     </Button>
+                  ) : (
+                    <>
+                      <Button size="sm" disabled={busyId === lead.id} onClick={() => setStatus(lead, 'interested')}>
+                        <ThumbsUp className="h-3.5 w-3.5 mr-1.5" />
+                        Interested
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={busyId === lead.id} onClick={() => setStatus(lead, 'na')}>
+                        NA
+                      </Button>
+                    </>
                   )}
                 </div>
               </CardContent>
@@ -224,7 +245,7 @@ const Campaigns = () => {
           ))}
           {!leads.length && !leadLoading && (
             <div className="lg:col-span-2 rounded-2xl bg-white py-16 text-center text-sm text-muted-foreground">
-              {filter === 'pending' ? 'No leads waiting for review in this campaign.' : 'No leads found.'}
+              {filter === 'na' ? 'No leads marked NA.' : filter === 'interested' ? 'No interested leads yet.' : 'No leads found.'}
             </div>
           )}
         </div>
