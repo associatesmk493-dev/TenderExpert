@@ -32,13 +32,12 @@ export async function invoiceToPngBlob(html: string): Promise<Blob> {
     if (!doc || !page) throw new Error('Invoice could not be rendered');
 
     // Images inside an SVG-as-image cannot load remote URLs, so embed the logo.
-    const logo = page.querySelector('img.logo') as HTMLImageElement | null;
-    if (logo) {
+    for (const picture of Array.from(page.querySelectorAll('img'))) {
       try {
-        logo.src = await toDataUrl(logo.src);
-        await logo.decode();
+        picture.src = await toDataUrl(picture.src);
+        await picture.decode();
       } catch {
-        logo.remove();
+        picture.remove();
       }
     }
 

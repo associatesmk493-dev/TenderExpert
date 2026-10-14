@@ -20,6 +20,7 @@ export type CompanyInfo = {
   bank_name: string;
   bank_branch: string;
   logo_url: string;
+  qr_code_url: string;
   terms_conditions: string;
 };
 
@@ -38,6 +39,7 @@ export const DEFAULT_COMPANY: CompanyInfo = {
   bank_name: 'YES BANK LTD',
   bank_branch: 'Sector-56, Gurugram',
   logo_url: '',
+  qr_code_url: '',
   terms_conditions: '',
 };
 
@@ -99,9 +101,9 @@ const formatDate = (value: string) => {
   return Number.isNaN(date.getTime()) ? esc(value) : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-// A label/value line that disappears when there is no value.
-const row = (label: string, value: unknown, bold = false) =>
-  String(value ?? '').trim() ? `<div class="kv"><span>${label}</span>${bold ? '<b>' : ''}${esc(value)}${bold ? '</b>' : ''}</div>` : '';
+// A "Label: value" line that disappears when there is no value.
+const line = (label: string, value: unknown) =>
+  String(value ?? '').trim() ? `<div class="ln"><b>${label}:</b> ${esc(value)}</div>` : '';
 
 export function invoiceHtml(invoice: any, companyInput: Partial<CompanyInfo> | null, kind: InvoiceKind) {
   const inv = withGst(invoice);
@@ -130,155 +132,149 @@ export function invoiceHtml(invoice: any, companyInput: Partial<CompanyInfo> | n
       : [];
   const hasTax = taxRows.length > 0 && taxRows.some(([, , amount]) => amount > 0);
 
-  const header = company.logo_url
+  const brand = company.logo_url
     ? `<img class="logo" src="${esc(company.logo_url)}" alt="${esc(company.company_name)}">`
     : `<div class="brand"><div class="amp">&amp;</div><div><div class="brand-name">${esc(company.company_name).toUpperCase()}</div><div class="brand-bar"></div><div class="tagline">${esc(company.tagline)}</div></div></div>`;
 
-  const byLines = [
-    company.address ? `<div class="line">${multiline(company.address)}</div>` : '',
-    row('GST No', company.gst_number, true),
-    row('PAN', company.pan_number, true),
-    row('Phone', company.phone),
-    row('Email', company.email),
+  const fromLines = [
+    company.address ? `<div class="ln"><b>Address:</b> ${multiline(company.address)}</div>` : '',
+    line('Phone', company.phone),
+    line('Email', company.email),
+    line('GST No', company.gst_number),
+    line('PAN', company.pan_number),
   ].join('');
 
   const toLines = [
-    inv.bill_to_contact ? `<div class="line">Attn: ${esc(inv.bill_to_contact)}</div>` : '',
-    inv.bill_to_address ? `<div class="line">${multiline(inv.bill_to_address)}</div>` : '',
-    row('GST No', inv.bill_to_gst, true),
-    row('Phone', inv.bill_to_phone),
-    row('Email', inv.bill_to_email),
+    line('Attn', inv.bill_to_contact),
+    inv.bill_to_address ? `<div class="ln"><b>Address:</b> ${multiline(inv.bill_to_address)}</div>` : '',
+    line('Phone', inv.bill_to_phone),
+    line('Email', inv.bill_to_email),
+    line('GST No', inv.bill_to_gst),
   ].join('');
 
-  const bankRows = [
-    row('Account name', company.account_name),
-    row('Account no', company.account_number),
-    row('IFSC', company.ifsc_code),
-    row('Bank', company.bank_name),
-    row('Branch', company.bank_branch),
+  const bankLines = [
+    line('Account name', company.account_name),
+    line('Account no', company.account_number),
+    line('IFSC', company.ifsc_code),
+    line('Bank', company.bank_name),
+    line('Branch', company.bank_branch),
   ].join('');
 
-  const paymentBox =
-    advance > 0 || inv.payment_terms
-      ? `<div class="box warm" style="flex:1">
-          <div class="label">Payment terms</div>
-          ${advance > 0 ? `<div class="pay-row"><span>Total amount</span><b>&#8377; ${formatMoney(total)}</b></div>
-          <div class="pay-row"><span>Advance received</span><b>&#8377; ${formatMoney(advance)}</b></div>
-          <div class="pay-row due"><span>Balance due</span><b>&#8377; ${formatMoney(balance)}</b></div>` : ''}
-          ${inv.payment_terms ? `<div class="terms-text">${multiline(inv.payment_terms)}</div>` : ''}
-        </div>`
-      : '';
+  const termsList = [
+    ...(inv.payment_terms ? String(inv.payment_terms).split('\n') : []),
+    ...(company.terms_conditions ? String(company.terms_conditions).split('\n') : []),
+  ]
+    .map((entry) => entry.trim().replace(/^\d+[.)]\s*/, ''))
+    .filter(Boolean);
 
   const contacts = [company.phone, company.email, company.website].filter((value) => String(value || '').trim());
+  const payable = advance > 0 ? balance : total;
 
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=794"><title>${esc(inv.invoice_number)}</title>
 <style>
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { margin: 0; background: #e5e7eb; font-family: Arial, Helvetica, sans-serif; color: #1f2937; }
-  .page { font-family: Arial, Helvetica, sans-serif; color: #1f2937; width: 794px; margin: 0 auto; background: #fff; }
-  .topbar { height: 8px; background: linear-gradient(90deg, #1b4f9c 0%, #1b4f9c 82%, #f7941d 82%, #f7941d 100%); }
-  .content { padding: 28px 44px 8px; }
-  .head { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding-bottom: 18px; border-bottom: 2px solid #f7941d; }
-  .logo { max-height: 72px; max-width: 340px; display: block; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .amp { width: 52px; height: 52px; border-radius: 50%; border: 4px solid #f7941d; color: #f7941d; font-weight: 800; font-size: 28px; display: flex; align-items: center; justify-content: center; }
-  .brand-name { font-size: 24px; font-weight: 800; color: #1b4f9c; letter-spacing: .5px; }
+  body { margin: 0; background: #e5e7eb; font-family: Arial, Helvetica, sans-serif; color: #111827; }
+  .page { font-family: Arial, Helvetica, sans-serif; color: #111827; width: 794px; min-height: 1120px; margin: 0 auto; background: #fff; display: flex; flex-direction: column; }
+  .topbar { height: 9px; background: linear-gradient(90deg, #1b4f9c 0%, #1b4f9c 82%, #f7941d 82%, #f7941d 100%); }
+  .content { flex: 1; display: flex; flex-direction: column; padding: 26px 44px 0; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .logo { max-height: 78px; max-width: 340px; display: block; }
+  .brand { display: flex; align-items: center; gap: 13px; }
+  .amp { width: 56px; height: 56px; border-radius: 50%; border: 4px solid #f7941d; color: #f7941d; font-weight: 800; font-size: 30px; display: flex; align-items: center; justify-content: center; }
+  .brand-name { font-size: 24px; font-weight: 800; color: #1b4f9c; letter-spacing: .5px; white-space: nowrap; }
   .brand-bar { height: 5px; background: #f7941d; margin: 3px 0; }
-  .tagline { font-size: 11px; font-weight: 700; color: #1b4f9c; }
+  .tagline { font-size: 12px; font-weight: 700; color: #1b4f9c; }
   .doc { text-align: right; }
-  .doc-title { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: #1b4f9c; text-transform: uppercase; }
-  .chips { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
-  .chip { min-width: 120px; padding: 7px 12px; border-radius: 8px; background: #eef3fb; text-align: left; }
-  .chip span { display: block; font-size: 9px; font-weight: 700; letter-spacing: .9px; color: #6b7280; text-transform: uppercase; }
-  .chip b { display: block; margin-top: 2px; font-size: 12.5px; color: #111827; }
-  .parties { display: flex; gap: 16px; margin-top: 20px; }
-  .box, .party { flex: 1; padding: 13px 15px; border-radius: 8px; background: #f7f9fc; }
-  .party { border-left: 3px solid #1b4f9c; }
-  .party.to { border-left-color: #f7941d; }
-  .label { margin-bottom: 7px; font-size: 9.5px; font-weight: 700; letter-spacing: .9px; color: #1b4f9c; text-transform: uppercase; }
-  .pname { margin-bottom: 4px; font-size: 14.5px; font-weight: 800; color: #111827; }
-  .line { font-size: 11px; line-height: 1.55; color: #374151; }
-  .kv { display: flex; gap: 8px; font-size: 11px; line-height: 1.7; color: #374151; }
-  .kv span { min-width: 70px; color: #6b7280; }
-  .kv b { color: #111827; }
-  table.items { width: 100%; border-collapse: collapse; margin-top: 20px; }
-  table.items th { padding: 10px 12px; background: #fde6c4; color: #7a4a0a; font-size: 10px; letter-spacing: .8px; text-align: left; }
-  table.items th:first-child { border-radius: 8px 0 0 8px; }
-  table.items th:last-child { border-radius: 0 8px 8px 0; }
-  table.items td { padding: 12px; border-bottom: 1px solid #eceff3; font-size: 11.5px; line-height: 1.5; vertical-align: top; }
+  .doc-title { font-size: 26px; font-weight: 800; line-height: 1; letter-spacing: .5px; white-space: nowrap; color: #1b4f9c; text-transform: uppercase; }
+  .doc-meta { margin-top: 9px; font-size: 13px; line-height: 1.65; }
+  .doc-meta b { font-weight: 800; }
+  .parties { display: flex; gap: 26px; margin-top: 22px; }
+  .party { flex: 1; min-width: 0; }
+  .bar { padding: 9px 15px; background: #1b4f9c; color: #fff; font-size: 14px; font-weight: 800; }
+  .pbody { padding: 10px 2px 0; font-size: 12px; line-height: 1.6; }
+  .pname { margin-bottom: 4px; font-size: 15.5px; font-weight: 800; }
+  .ln b { font-weight: 800; }
+  table.items { width: 100%; border-collapse: collapse; margin-top: 20px; border: 1px solid #1f2937; }
+  table.items th { padding: 10px 14px; border: 1px solid #1f2937; background: #1b4f9c; color: #fff; font-size: 13px; text-align: left; }
+  table.items td { padding: 11px 14px; border: 1px solid #1f2937; font-size: 13px; line-height: 1.5; vertical-align: top; }
   table.items th.c, table.items td.c { text-align: center; }
   table.items th.r, table.items td.r { text-align: right; white-space: nowrap; }
   table.items tr { page-break-inside: avoid; }
-  .summary { display: flex; gap: 22px; margin-top: 18px; align-items: flex-start; }
-  .words { flex: 1; padding: 13px 15px; border: 1px dashed #cbd5e1; border-radius: 8px; }
-  .words .txt { margin-top: 2px; font-size: 12px; font-weight: 700; line-height: 1.55; }
-  .words .eoe { margin-top: 8px; font-size: 10px; color: #6b7280; }
-  .totals { width: 262px; }
-  .totals .r { display: flex; justify-content: space-between; padding: 7px 4px; border-bottom: 1px solid #eceff3; font-size: 11.5px; color: #374151; }
-  .totals .grand { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 11px 14px; border-radius: 8px; background: #1b4f9c; color: #fff; font-size: 14px; font-weight: 800; }
-  .lower { display: flex; gap: 16px; margin-top: 18px; align-items: stretch; }
-  .warm { background: #fffaf2; border: 1px solid #f3c88e; }
-  .pay-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 11.5px; }
-  .pay-row.due { margin-top: 5px; padding-top: 8px; border-top: 1px solid #f3c88e; font-size: 13px; color: #b45309; }
-  .terms-text { margin-top: 8px; font-size: 10.5px; line-height: 1.55; color: #4b5563; }
-  .sign { flex: .8; display: flex; flex-direction: column; justify-content: space-between; min-height: 110px; text-align: right; font-size: 11px; font-weight: 700; }
-  .sign .sig-line { padding-top: 6px; border-top: 1px solid #9ca3af; }
-  .terms { margin-top: 16px; font-size: 10px; line-height: 1.55; color: #4b5563; }
-  .footer { margin-top: 24px; }
-  .computer { padding-bottom: 8px; text-align: center; font-size: 9.5px; font-weight: 700; color: #6b7280; }
-  .contacts { display: flex; justify-content: center; flex-wrap: wrap; gap: 5px 20px; padding: 0 44px 14px; font-size: 10px; font-weight: 700; color: #1b4f9c; }
+  .summary { display: flex; gap: 28px; margin-top: 18px; align-items: flex-start; }
+  .left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .box { padding: 11px 14px; border: 1px dashed #b8c2d0; border-radius: 10px; }
+  .box-title { margin-bottom: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .9px; color: #1b4f9c; text-transform: uppercase; }
+  .words-text { font-size: 13px; font-weight: 800; line-height: 1.5; }
+  .eoe { margin-top: 6px; font-size: 10.5px; color: #6b7280; }
+  .bank { font-size: 11.5px; line-height: 1.6; }
+  .qr { display: flex; align-items: center; gap: 16px; }
+  .qr img { width: 96px; height: 96px; display: block; }
+  .qr .pay { font-size: 14px; font-weight: 800; }
+  .qr .apps { margin-top: 4px; font-size: 11px; color: #6b7280; }
+  .totals { width: 300px; font-size: 13.5px; }
+  .totals .r { display: flex; justify-content: space-between; padding: 6px 0; }
+  .totals .r b { font-weight: 800; }
+  .totals .grand { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 12px; border-top: 2px solid #1b4f9c; font-size: 18px; font-weight: 800; }
+  .totals .due { color: #b45309; font-weight: 800; }
+  .terms { margin-top: 16px; font-size: 12px; line-height: 1.65; }
+  .terms .t { margin-bottom: 4px; font-size: 14px; font-weight: 800; }
+  .grow { flex: 1; min-height: 18px; }
+  .sign { align-self: flex-end; width: 240px; padding-top: 6px; text-align: right; font-size: 12.5px; }
+  .sign .for { font-weight: 700; }
+  .sign .space { height: 40px; }
+  .sign .sig { padding-top: 7px; border-top: 1px solid #9ca3af; color: #4b5563; text-align: center; }
+  .footer { margin-top: 14px; }
+  .computer { padding-bottom: 6px; text-align: center; font-size: 10px; color: #6b7280; }
+  .contacts { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 22px; padding: 0 46px 12px; font-size: 11px; font-weight: 700; color: #1b4f9c; }
   .contacts span::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #f7941d; }
-  .band { height: 8px; background: linear-gradient(90deg, #f7941d 0%, #f7941d 18%, #1b4f9c 18%, #1b4f9c 100%); }
+  .thanks { padding: 13px; border-top: 4px solid #f7941d; background: #1b4f9c; color: #fff; text-align: center; font-size: 15px; font-weight: 800; }
   @media print { body { background: #fff; } }
 </style></head><body><div class="page">
   <div class="topbar"></div>
   <div class="content">
     <div class="head">
-      <div>${header}</div>
+      <div>${brand}</div>
       <div class="doc">
         <div class="doc-title">${title}</div>
-        <div class="chips">
-          <div class="chip"><span>Invoice no</span><b>${esc(inv.invoice_number)}</b></div>
-          <div class="chip"><span>Date</span><b>${formatDate(inv.invoice_date)}</b></div>
-        </div>
+        <div class="doc-meta"><div><b>Invoice No:</b> ${esc(inv.invoice_number)}</div><div><b>Date:</b> ${formatDate(inv.invoice_date)}</div>${inv.due_date ? `<div><b>Due:</b> ${formatDate(inv.due_date)}</div>` : ''}</div>
       </div>
     </div>
 
     <div class="parties">
-      <div class="party"><div class="label">Billed by</div><div class="pname">${esc(company.company_name)}</div>${byLines}</div>
-      <div class="party to"><div class="label">Billed to</div><div class="pname">${esc(inv.bill_to_name || inv.b2g_leads?.organization_name || inv.companies?.name || 'Client')}</div>${toLines}</div>
+      <div class="party"><div class="bar">Billed By</div><div class="pbody"><div class="pname">${esc(company.company_name)}</div>${fromLines}</div></div>
+      <div class="party"><div class="bar">Billed To</div><div class="pbody"><div class="pname">${esc(inv.bill_to_name || inv.b2g_leads?.organization_name || inv.companies?.name || 'Client')}</div>${toLines}</div></div>
     </div>
 
     <table class="items">
-      <tr><th class="c" style="width:48px">S.NO</th><th>DESCRIPTION</th>${hasHsn ? '<th class="c" style="width:120px">HSN / SAC</th>' : ''}<th class="r" style="width:140px">AMOUNT (&#8377;)</th></tr>
-      ${items.map((item, index) => `<tr><td class="c">${index + 1}</td><td>${multiline(item.description)}</td>${hasHsn ? `<td class="c">${esc(item.hsn_sac)}</td>` : ''}<td class="r">${formatMoney(item.amount)}</td></tr>`).join('')}
+      <tr><th class="c" style="width:48px">#</th><th>Description</th>${hasHsn ? '<th class="c" style="width:120px">HSN / SAC</th>' : ''}<th class="r" style="width:150px">Amount</th></tr>
+      ${items.map((item, index) => `<tr><td class="c">${index + 1}</td><td>${multiline(item.description)}</td>${hasHsn ? `<td class="c">${esc(item.hsn_sac)}</td>` : ''}<td class="r">&#8377;${formatMoney(item.amount)}</td></tr>`).join('')}
     </table>
 
     <div class="summary">
-      <div class="words">
-        <div class="label">Amount chargeable (in words)</div>
-        <div class="txt">${esc(words)}</div>
-        <div class="eoe">E. &amp; O.E</div>
+      <div class="left">
+        <div class="box"><div class="box-title">Amount chargeable (in words)</div><div class="words-text">${esc(words)}</div><div class="eoe">E. &amp; O.E</div></div>
+        ${bankLines ? `<div class="box"><div class="box-title">Bank details</div><div class="bank">${bankLines}</div></div>` : ''}
+        ${company.qr_code_url ? `<div class="box qr"><img src="${esc(company.qr_code_url)}" alt="Payment QR"><div><div class="pay">Scan &amp; pay &#8377;${formatMoney(payable)}</div><div class="apps">GPay &middot; PhonePe &middot; Paytm &middot; any UPI app</div></div></div>` : ''}
       </div>
       <div class="totals">
-        ${hasTax ? `<div class="r"><span>Sub total</span><span>${formatMoney(subtotal)}</span></div>` : ''}
-        ${hasTax ? taxRows.map(([name, pct, amount]) => `<div class="r"><span>${name} (${pct}%)</span><span>${formatMoney(amount)}</span></div>`).join('') : ''}
-        <div class="grand"><span>TOTAL</span><span>&#8377; ${formatMoney(total)}</span></div>
+        ${hasTax ? `<div class="r"><span>Taxable Amount</span><b>&#8377;${formatMoney(subtotal)}</b></div>` : ''}
+        ${hasTax ? taxRows.map(([name, pct, amount]) => `<div class="r"><span>${name} (${pct}%)</span><b>&#8377;${formatMoney(amount)}</b></div>`).join('') : ''}
+        <div class="grand"><span>Total Amount</span><span>&#8377;${formatMoney(total)}</span></div>
+        ${advance > 0 ? `<div class="r"><span>Advance received</span><b>&#8377;${formatMoney(advance)}</b></div><div class="r due"><span>Balance Due</span><span>&#8377;${formatMoney(balance)}</span></div>` : ''}
       </div>
     </div>
 
-    <div class="lower">
-      ${bankRows ? `<div class="box" style="flex:1.2"><div class="label">Bank details</div>${bankRows}</div>` : ''}
-      ${paymentBox}
-      <div class="sign"><div>for ${esc(company.company_name)}</div><div class="sig-line">Authorised Signatory</div></div>
+    ${termsList.length ? `<div class="terms"><div class="t">Terms &amp; Conditions</div>${termsList.map((entry, index) => `<div>${termsList.length > 1 ? `${index + 1}. ` : ''}${esc(entry)}</div>`).join('')}</div>` : ''}
+
+    <div class="grow"></div>
+    <div class="sign"><div class="for">for ${esc(company.company_name)}</div><div class="space"></div><div class="sig">Authorised Signatory</div></div>
+
+    <div class="footer">
+      <div class="computer">This is a Computer Generated Invoice</div>
+      ${contacts.length ? `<div class="contacts">${contacts.map((value) => `<span>${esc(value)}</span>`).join('')}</div>` : ''}
     </div>
-    ${company.terms_conditions ? `<div class="terms"><b>Terms &amp; Conditions</b><br>${multiline(company.terms_conditions)}</div>` : ''}
   </div>
-  <div class="footer">
-    <div class="computer">This is a Computer Generated Invoice</div>
-    ${contacts.length ? `<div class="contacts">${contacts.map((value) => `<span>${esc(value)}</span>`).join('')}</div>` : ''}
-    <div class="band"></div>
-  </div>
+  <div class="thanks">Thank you for your business!</div>
 </div></body></html>`;
 }
