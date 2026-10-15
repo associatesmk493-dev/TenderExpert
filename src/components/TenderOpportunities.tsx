@@ -11,9 +11,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import BoqTable, { cleanBoqRows, toBoqRows, type BoqRow } from '@/components/BoqTable';
+import BoqTable, { boqTotalOf, cleanBoqRows, toBoqRows, type BoqRow } from '@/components/BoqTable';
 import CalcOptions, { cleanCalcOptions, netOf, toCalcOptions, type CalcOption } from '@/components/CalcOptions';
 import DictateButton from '@/components/DictateButton';
+import TenderExcelTools from '@/components/TenderExcelTools';
 import ListEditor from '@/components/ListEditor';
 import { skippedMessage, writeWithFallback } from '@/lib/writeWithFallback';
 
@@ -228,10 +229,13 @@ export default function TenderOpportunities() {
           <h1 className="mt-1 text-3xl font-bold">Tender opportunities</h1>
           <p className="text-muted-foreground">Current sites — status, parties, documents, BOQ and project calculations in one place</p>
         </div>
-        <Button onClick={openNew}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add tender
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <TenderExcelTools rows={rows} onImported={load} />
+          <Button onClick={openNew}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add tender
+          </Button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -329,7 +333,7 @@ export default function TenderOpportunities() {
               <Label text="Scope of work"><Input value={form.tender_title} onChange={(e) => set('tender_title', e.target.value)} placeholder="e.g. STP plant 50 KLD" /></Label>
               <Label text="Department / client"><Input value={form.authority_name} onChange={(e) => set('authority_name', e.target.value)} /></Label>
               <Label text="Contact no"><Input type="tel" value={form.contact_no} onChange={(e) => set('contact_no', e.target.value)} /></Label>
-              <Label text="Tentative project cost"><Input type="number" min="0" value={form.estimated_value} onChange={(e) => set('estimated_value', e.target.value)} /></Label>
+              <Label text="Tentative project cost"><Input type="number" min="0" value={form.estimated_value} onChange={(e) => set('estimated_value', e.target.value)} />{boqTotalOf(boq) > 0 && Number(form.estimated_value) !== boqTotalOf(boq) && (<button type="button" className="mt-1 text-xs font-medium text-primary hover:underline" onClick={() => set('estimated_value', String(boqTotalOf(boq)))}>Use BOQ total ({money(boqTotalOf(boq))})</button>)}</Label>
               <Label text="Approved fund"><Input value={form.approved_fund} onChange={(e) => set('approved_fund', e.target.value)} placeholder="Amount or “pending”" /></Label>
               <Label text="Tender timeline"><Input type="date" value={form.tender_timeline} onChange={(e) => set('tender_timeline', e.target.value)} /></Label>
             </div>
@@ -370,7 +374,7 @@ export default function TenderOpportunities() {
 
           <Section title=""><BoqTable rows={boq} onChange={setBoq} /></Section>
 
-          <Section title=""><CalcOptions options={calcs} onChange={setCalcs} /></Section>
+          <Section title=""><CalcOptions options={calcs} onChange={setCalcs} boqTotal={boqTotalOf(boq)} /></Section>
 
           <Section title="Conversation from party">
             <Textarea rows={3} value={form.conversation} onChange={(e) => set('conversation', e.target.value)} placeholder="What the party said — offers, advance, commitments…" />
@@ -414,7 +418,7 @@ export default function TenderOpportunities() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t pt-4 first:border-t-0 first:pt-0">
+    <section className="min-w-0 border-t pt-4 first:border-t-0 first:pt-0">
       {title && <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-primary">{title}</h3>}
       {children}
     </section>

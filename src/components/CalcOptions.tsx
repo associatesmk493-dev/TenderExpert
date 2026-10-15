@@ -44,8 +44,16 @@ export const netOf = (lines: { kind: string; amount: string | number }[]) =>
 
 const money = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
 
-export default function CalcOptions({ options, onChange }: { options: CalcOption[]; onChange: (options: CalcOption[]) => void }) {
+export default function CalcOptions({ options, onChange, boqTotal = 0 }: { options: CalcOption[]; onChange: (options: CalcOption[]) => void; boqTotal?: number }) {
   const setOption = (index: number, patch: Partial<CalcOption>) => onChange(options.map((option, i) => (i === index ? { ...option, ...patch } : option)));
+  // Put the BOQ total into this option's Project Value line.
+  const fillFromBoq = (optionIndex: number) => {
+    const lines = options[optionIndex].lines;
+    const at = lines.findIndex((line) => /project value/i.test(line.label));
+    setOption(optionIndex, {
+      lines: at >= 0 ? lines.map((line, i) => (i === at ? { ...line, kind: 'in', amount: String(boqTotal) } : line)) : [{ label: 'Project Value', kind: 'in', amount: String(boqTotal), note: '' }, ...lines],
+    });
+  };
   const setLine = (optionIndex: number, lineIndex: number, patch: Partial<CalcLine>) =>
     setOption(optionIndex, { lines: options[optionIndex].lines.map((line, i) => (i === lineIndex ? { ...line, ...patch } : line)) });
 
@@ -69,14 +77,19 @@ export default function CalcOptions({ options, onChange }: { options: CalcOption
             <div key={optionIndex} className="rounded-xl border bg-white p-3">
               <div className="mb-2 flex items-center gap-2">
                 <Input className="h-9 font-semibold" value={option.name} onChange={(e) => setOption(optionIndex, { name: e.target.value })} />
+                {boqTotal > 0 && (
+                  <Button type="button" size="sm" variant="outline" className="shrink-0 text-xs" title="Fill Project Value from the BOQ total" onClick={() => fillFromBoq(optionIndex)}>
+                    Use BOQ total
+                  </Button>
+                )}
                 <Button type="button" size="icon" variant="ghost" aria-label={`Remove ${option.name}`} onClick={() => onChange(options.filter((_, i) => i !== optionIndex))}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
               <div className="space-y-2">
                 {option.lines.map((line, lineIndex) => (
-                  <div key={lineIndex} className="grid grid-cols-[1fr_84px_110px_auto] gap-1.5">
-                    <Input value={line.label} placeholder="Item" onChange={(e) => setLine(optionIndex, lineIndex, { label: e.target.value })} />
+                  <div key={lineIndex} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 sm:grid-cols-[1fr_84px_110px_auto]">
+                    <Input className="col-span-3 sm:col-span-1" value={line.label} placeholder="Item" onChange={(e) => setLine(optionIndex, lineIndex, { label: e.target.value })} />
                     <select
                       aria-label="Money in or out"
                       className="h-10 rounded-md border bg-background px-2 text-xs"
@@ -90,7 +103,7 @@ export default function CalcOptions({ options, onChange }: { options: CalcOption
                     <Button type="button" size="icon" variant="ghost" aria-label="Remove line" onClick={() => setOption(optionIndex, { lines: option.lines.filter((_, i) => i !== lineIndex) })}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                    <Input className="col-span-4 h-8 text-xs" value={line.note} placeholder="Note (e.g. 23 %, on award)" onChange={(e) => setLine(optionIndex, lineIndex, { note: e.target.value })} />
+                    <Input className="col-span-3 h-8 text-xs sm:col-span-4" value={line.note} placeholder="Note (e.g. 23 %, on award)" onChange={(e) => setLine(optionIndex, lineIndex, { note: e.target.value })} />
                   </div>
                 ))}
               </div>
