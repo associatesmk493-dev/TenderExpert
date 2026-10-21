@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useEffect, useMemo, useState } from 'react';
-import { Landmark, Phone, Plus, Search, Trash2 } from 'lucide-react';
+import { ExternalLink, Landmark, Phone, Plus, Search, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import BoqTable, { boqTotalOf, cleanBoqRows, toBoqRows, type BoqRow } from '@/components/BoqTable';
 import CalcOptions, { cleanCalcOptions, netOf, toCalcOptions, type CalcOption } from '@/components/CalcOptions';
+import CompanySheets from '@/components/CompanySheets';
+import SuccessFees, { cleanFees, feeTotals, toFees, type FeeRow } from '@/components/SuccessFees';
 import DictateButton from '@/components/DictateButton';
 import TenderExcelTools from '@/components/TenderExcelTools';
 import ListEditor from '@/components/ListEditor';
@@ -22,6 +24,17 @@ const money = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency',
 const nice = (value?: string | null) => (value || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const BOQ_STATUS = ['not_started', 'preparation', 'submitted', 'revision', 'approved'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+// Where the project stands, from BOQ to the company being paid.
+const STAGES = [
+  { value: 'boq_submitted', label: 'BOQ submitted' },
+  { value: 'sanction_awaited', label: 'Sanction awaited' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'tender_called', label: 'Tender called' },
+  { value: 'awarded', label: 'Awarded to contractor' },
+  { value: 'under_process', label: 'Under process' },
+  { value: 'payment_received', label: 'Payment received by company' },
+];
+const stageLabel = (value?: string | null) => STAGES.find((stage) => stage.value === value)?.label || nice(value);
 const DOC_NAMES = ['BOQ', 'AR', 'Quote', 'PO', 'Approval'];
 const DOC_STATUS = ['pending', 'done', 'awaited', 'not_required'];
 
@@ -44,6 +57,10 @@ type SheetForm = {
   boq_status: string;
   decision_maker_name: string;
   next_action: string;
+  company_name: string;
+  project_stage: string;
+  boq_link: string;
+  mou_link: string;
 };
 const blankForm = (): SheetForm => ({
   month: MONTHS[new Date().getMonth()],
@@ -63,6 +80,10 @@ const blankForm = (): SheetForm => ({
   boq_status: 'not_started',
   decision_maker_name: '',
   next_action: '',
+  company_name: '',
+  project_stage: '',
+  boq_link: '',
+  mou_link: '',
 });
 const textList = (value: any): string[] => (Array.isArray(value) ? value.map((entry) => String(entry)) : []);
 const clean = (items: string[]) => items.map((entry) => entry.trim()).filter(Boolean);
@@ -84,6 +105,9 @@ export default function TenderOpportunities() {
   const [documents, setDocuments] = useState<DocRow[]>([]);
   const [boq, setBoq] = useState<BoqRow[]>(toBoqRows([]));
   const [calcs, setCalcs] = useState<CalcOption[]>([]);
+  const [fees, setFees] = useState<FeeRow[]>([]);
+  const [view, setView] = useState<'projects' | 'companies'>('projects');
+  const [stageFilter, setStageFilter] = useState('all');
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -102,9 +126,10 @@ export default function TenderOpportunities() {
     return rows.filter(
       (row) =>
         (monthFilter === 'all' || String(row.month || '').trim() === monthFilter) &&
-        (!term || [row.tender_title, row.authority_name, row.site_name, row.division, row.contact_no, (row.parties || []).join(' ')].join(' ').toLowerCase().includes(term)),
+        (stageFilter === 'all' || row.project_stage === stageFilter) &&
+        (!term || [row.tender_title, row.authority_name, row.company_name, row.site_name, row.division, row.contact_no, (row.parties || []).join(' ')].join(' ').toLowerCase().includes(term)),
     );
-  }, [rows, query, monthFilter]);
+  }, [rows, query, monthFilter, stageFilter]);
 
   const set = (key: keyof SheetForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
 
@@ -117,6 +142,7 @@ export default function TenderOpportunities() {
     setDocuments(DOC_NAMES.slice(0, 4).map((name) => ({ name, status: 'pending' })));
     setBoq(toBoqRows([]));
     setCalcs([]);
+    setFees([]);
     setOpen(true);
   };
 
@@ -140,6 +166,10 @@ export default function TenderOpportunities() {
       boq_status: row.boq_status || 'not_started',
       decision_maker_name: row.decision_maker_name || '',
       next_action: row.next_action || '',
+      company_name: row.company_name || '',
+      project_stage: row.project_stage || '',
+      boq_link: row.boq_link || '',
+      mou_link: row.mou_link || '',
     });
     setOffices(textList(row.offices).length ? textList(row.offices) : ['']);
     setStatusLog(textList(row.status_log).length ? textList(row.status_log) : ['']);
@@ -147,6 +177,7 @@ export default function TenderOpportunities() {
     setDocuments(Array.isArray(row.documents) ? row.documents.map((doc: any) => ({ name: doc.name || '', status: doc.status || 'pending' })) : []);
     setBoq(toBoqRows(row.boq_items));
     setCalcs(toCalcOptions(row.calculations));
+    setFees(toFees(row.success_fees));
     setOpen(true);
   };
 
@@ -182,6 +213,11 @@ export default function TenderOpportunities() {
       next_action: form.next_action.trim() || null,
       boq_items: cleanBoqRows(boq),
       calculations: cleanCalcOptions(calcs),
+      company_name: form.company_name.trim() || null,
+      project_stage: form.project_stage || null,
+      boq_link: form.boq_link.trim() || null,
+      mou_link: form.mou_link.trim() || null,
+      success_fees: cleanFees(fees),
     };
     setSaving(true);
     const { result, skipped } = await writeWithFallback(
@@ -219,6 +255,15 @@ export default function TenderOpportunities() {
     load();
   };
 
+  const changeStage = async (id: string, value: string) => {
+    setRows((current) => current.map((row) => (row.id === id ? { ...row, project_stage: value } : row)));
+    const { error } = await supabase.from('tender_opportunities' as any).update({ project_stage: value }).eq('id', id);
+    if (error) {
+      toast({ title: 'Stage not saved', description: /project_stage/.test(error.message) ? 'Run the latest Supabase SQL first.' : error.message, variant: 'destructive' });
+      load();
+    }
+  };
+
   const setDoc = (index: number, patch: Partial<DocRow>) => setDocuments((current) => current.map((doc, i) => (i === index ? { ...doc, ...patch } : doc)));
 
   return (
@@ -243,6 +288,13 @@ export default function TenderOpportunities() {
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input className="bg-white pl-9" placeholder="Search site, scope, division, party or contact" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
+        <Select value={stageFilter} onValueChange={setStageFilter}>
+          <SelectTrigger className="bg-white sm:w-56"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All stages</SelectItem>
+            {STAGES.map((stage) => <SelectItem key={stage.value} value={stage.value}>{stage.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
         {months.length > 0 && (
           <Select value={monthFilter} onValueChange={setMonthFilter}>
             <SelectTrigger className="bg-white sm:w-44"><SelectValue /></SelectTrigger>
@@ -254,13 +306,24 @@ export default function TenderOpportunities() {
         )}
       </div>
 
-      <div className="space-y-3">
+      <div className="mb-4 inline-flex rounded-xl bg-white p-1 shadow-sm">
+        {(['projects', 'companies'] as const).map((value) => (
+          <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-4 py-1.5 text-sm font-medium ${view === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>
+            {value === 'projects' ? 'Projects' : 'By company'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'companies' && <CompanySheets rows={list} stageLabel={stageLabel} onOpen={openEdit} />}
+
+      <div className={`space-y-3 ${view === 'companies' ? 'hidden' : ''}`}>
         {list.map((row) => {
           const statuses = textList(row.status_log);
           const latest = statuses[statuses.length - 1];
           const calc = toCalcOptions(row.calculations)[0];
           const net = calc ? netOf(calc.lines) : null;
           const timeline = row.tender_timeline || row.submission_deadline;
+          const fee = feeTotals(Array.isArray(row.success_fees) ? row.success_fees : []);
           const late = timeline && new Date(timeline) < new Date() && row.go_no_go !== 'no_go';
           return (
             <Card key={row.id} className="cursor-pointer border-0 shadow-sm transition-shadow hover:shadow-md" onClick={() => openEdit(row)}>
@@ -272,6 +335,7 @@ export default function TenderOpportunities() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="truncate font-bold">{row.site_name || row.tender_title}</h3>
                     {row.month && <Badge variant="outline">{row.month}</Badge>}
+                    {row.company_name && <Badge variant="secondary">{row.company_name}</Badge>}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">
                     {[row.site_name ? row.tender_title : '', row.division, row.authority_name !== row.tender_title ? row.authority_name : ''].filter(Boolean).join(' · ')}
@@ -281,6 +345,7 @@ export default function TenderOpportunities() {
                     {row.approved_fund && <span>Fund: {Number(row.approved_fund) > 0 ? money(Number(row.approved_fund)) : row.approved_fund}</span>}
                     {Number(row.estimated_value) > 0 && <span>Tentative {money(Number(row.estimated_value))}</span>}
                     {textList(row.parties).length > 0 && <span>{textList(row.parties).length} parties</span>}
+                    {fee.potential > 0 && <span>Fee {money(fee.potential)} · received {money(fee.received)}</span>}
                     {row.contact_no && (
                       <span className="flex items-center gap-1">
                         <Phone className="h-3 w-3" />
@@ -291,6 +356,10 @@ export default function TenderOpportunities() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                  <Select value={row.project_stage || undefined} onValueChange={(value) => changeStage(row.id, value)}>
+                    <SelectTrigger className="w-52"><SelectValue placeholder="Set stage" /></SelectTrigger>
+                    <SelectContent>{STAGES.map((stage) => <SelectItem key={stage.value} value={stage.value}>{stage.label}</SelectItem>)}</SelectContent>
+                  </Select>
                   <Badge variant="secondary">BOQ: {nice(row.boq_status) || 'Not Started'}</Badge>
                   {net !== null && <Badge variant="outline" className={net < 0 ? 'text-rose-700' : 'text-emerald-700'}>Net {money(net)}</Badge>}
                   <Select value={row.go_no_go} onValueChange={(value) => decision(row.id, value)}>
@@ -323,6 +392,18 @@ export default function TenderOpportunities() {
           </DialogHeader>
 
           <Section title="Site details">
+            <div className="mb-4 grid gap-4 sm:grid-cols-2">
+              <Label text="Project stage">
+                <Select value={form.project_stage || undefined} onValueChange={(value) => set('project_stage', value)}>
+                  <SelectTrigger><SelectValue placeholder="Where does this project stand?" /></SelectTrigger>
+                  <SelectContent>{STAGES.map((stage) => <SelectItem key={stage.value} value={stage.value}>{stage.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </Label>
+              <Label text="Company we work for (manufacturer)">
+                <Input list="tender-companies" value={form.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="e.g. TMVT" />
+                <datalist id="tender-companies">{Array.from(new Set(rows.map((row) => String(row.company_name || '').trim()).filter(Boolean))).map((name) => <option key={name} value={name} />)}</datalist>
+              </Label>
+            </div>
             <div className="grid gap-4 sm:grid-cols-3">
               <Label text="Month">
                 <Input list="tender-months" value={form.month} onChange={(e) => set('month', e.target.value)} />
@@ -372,9 +453,39 @@ export default function TenderOpportunities() {
             </div>
           </Section>
 
-          <Section title=""><BoqTable rows={boq} onChange={setBoq} /></Section>
+          <Section title="">
+            <BoqTable rows={boq} onChange={setBoq} />
+            <div className="mt-3">
+              <Label text="BOQ file — Drive link (optional)">
+                <div className="flex gap-2">
+                  <Input type="url" value={form.boq_link} onChange={(e) => set('boq_link', e.target.value)} placeholder="Paste the Google Drive link of the BOQ" />
+                  {form.boq_link.trim() && (
+                    <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Open BOQ link" onClick={() => window.open(form.boq_link.trim(), '_blank', 'noopener')}>
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </Label>
+            </div>
+          </Section>
 
           <Section title=""><CalcOptions options={calcs} onChange={setCalcs} boqTotal={boqTotalOf(boq)} /></Section>
+
+          <Section title="">
+            <SuccessFees fees={fees} onChange={setFees} boqTotal={boqTotalOf(boq)} />
+            <div className="mt-3">
+              <Label text="Signed MOU / agreement for this project — link (optional)">
+                <div className="flex gap-2">
+                  <Input type="url" value={form.mou_link} onChange={(e) => set('mou_link', e.target.value)} placeholder="Paste the Drive link of the signed MOU (PDF)" />
+                  {form.mou_link.trim() && (
+                    <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Open MOU link" onClick={() => window.open(form.mou_link.trim(), '_blank', 'noopener')}>
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </Label>
+            </div>
+          </Section>
 
           <Section title="Conversation from party">
             <Textarea rows={3} value={form.conversation} onChange={(e) => set('conversation', e.target.value)} placeholder="What the party said — offers, advance, commitments…" />
