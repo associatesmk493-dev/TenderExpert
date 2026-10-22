@@ -143,7 +143,7 @@ export default function LeadFollowUpManager({
           Write what has to be done, choose who will do it and when it is due.
           It appears in Tasks & reminders for that person.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 [&>label]:min-w-0">
           <label className="space-y-1">
             <span className="text-xs font-medium text-muted-foreground">
               What is to be done
@@ -188,19 +188,20 @@ export default function LeadFollowUpManager({
               />
             )}
           </label>
-          <label className="space-y-1">
+          <label className="space-y-1 sm:col-span-2">
             <span className="text-xs font-medium text-muted-foreground">
               Due date & time
             </span>
-            <div className="grid grid-cols-[1fr_auto] gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] gap-2 sm:max-w-md">
               <Input
                 type="date"
+                className="min-w-0"
                 value={form.due_date}
                 onChange={(e) => setForm({ ...form, due_date: e.target.value })}
               />
               <Input
                 type="time"
-                className="w-28"
+                className="min-w-0"
                 value={form.due_time}
                 onChange={(e) => setForm({ ...form, due_time: e.target.value })}
               />

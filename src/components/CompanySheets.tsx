@@ -10,6 +10,7 @@ const money = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency',
 // One sheet per company: every project we handle for it, and its success-fee position.
 export default function CompanySheets({ rows, stageLabel, onOpen }: { rows: any[]; stageLabel: (value?: string | null) => string; onOpen: (row: any) => void }) {
   const [openName, setOpenName] = useState<string | null>(null);
+  const [show, setShow] = useState('all');
   const companies = useMemo(() => {
     const groups = new Map<string, any[]>();
     rows.forEach((row) => {
@@ -20,12 +21,21 @@ export default function CompanySheets({ rows, stageLabel, onOpen }: { rows: any[
       .map(([name, projects]) => ({ name, projects, totals: feeTotals(projects.flatMap((project) => (Array.isArray(project.success_fees) ? project.success_fees : []))) }))
       .sort((a, b) => b.projects.length - a.projects.length);
   }, [rows]);
+  const shown = companies.filter(({ totals }) => show === 'all' || (show === 'collect' && totals.outstanding > 0) || (show === 'overdue' && totals.overdue > 0));
 
   if (!companies.length) return <div className="rounded-2xl bg-white p-12 text-center text-sm text-muted-foreground">No tenders yet.</div>;
 
   return (
     <div className="space-y-3">
-      {companies.map(({ name, projects, totals }) => {
+      <div className="flex flex-wrap gap-2">
+        {[['all', 'All companies'], ['collect', 'Fee to collect'], ['overdue', 'Overdue fee']].map(([value, label]) => (
+          <button key={value} type="button" onClick={() => setShow(value)} className={`rounded-full px-3 py-1 text-xs font-medium ${show === value ? 'bg-primary text-primary-foreground' : 'bg-white text-muted-foreground shadow-sm'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {!shown.length && <div className="rounded-2xl bg-white p-10 text-center text-sm text-muted-foreground">No company matches this filter.</div>}
+      {shown.map(({ name, projects, totals }) => {
         const expanded = openName === name;
         return (
           <Card key={name} className="border-0 shadow-sm">

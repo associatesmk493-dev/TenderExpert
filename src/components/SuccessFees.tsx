@@ -68,7 +68,25 @@ export const feeTotals = (fees: any[]) => {
   return { potential, agreed, received, outstanding, overdue };
 };
 
-export default function SuccessFees({ fees, onChange, boqTotal = 0 }: { fees: FeeRow[]; onChange: (fees: FeeRow[]) => void; boqTotal?: number }) {
+const statusName = (value: string) => FEE_STATUS.find((status) => status.value === value)?.label.replace(/ \(.*\)/, '') || value;
+
+// Plain-language list of what changed between the saved fee lines and the new ones (for the change history).
+export const describeFeeChanges = (before: any[], after: any[]) => {
+  const changes: string[] = [];
+  after.forEach((fee, index) => {
+    const old = before[index];
+    const name = fee.label || `Fee ${index + 1}`;
+    if (!old) return changes.push(`Added “${name}” ${money(fee.amount)} (${statusName(fee.status)})`);
+    if (old.status !== fee.status) changes.push(`“${name}”: ${statusName(old.status)} → ${statusName(fee.status)}`);
+    if ((Number(old.amount) || 0) !== fee.amount) changes.push(`“${name}”: amount ${money(Number(old.amount) || 0)} → ${money(fee.amount)}`);
+    if ((Number(old.received) || 0) !== fee.received) changes.push(`“${name}”: received ${money(Number(old.received) || 0)} → ${money(fee.received)}`);
+    if ((old.due || '') !== fee.due) changes.push(`“${name}”: follow-up date ${old.due || 'none'} → ${fee.due || 'none'}`);
+  });
+  before.slice(after.length).forEach((old, index) => changes.push(`Removed “${old.label || `Fee ${after.length + index + 1}`}”`));
+  return changes;
+};
+
+export default function SuccessFees({ fees, onChange, boqTotal = 0, history = [] }: { fees: FeeRow[]; onChange: (fees: FeeRow[]) => void; boqTotal?: number; history?: any[] }) {
   const [percent, setPercent] = useState('');
   const setFee = (index: number, patch: Partial<FeeRow>) => onChange(fees.map((fee, i) => (i === index ? { ...fee, ...patch } : fee)));
   const totals = feeTotals(fees);
@@ -145,6 +163,22 @@ export default function SuccessFees({ fees, onChange, boqTotal = 0 }: { fees: Fe
           <p><span className="text-muted-foreground">To collect: </span><span className="font-bold text-amber-700">{money(totals.outstanding)}</span></p>
           {totals.overdue > 0 && <p><span className="text-muted-foreground">Overdue: </span><span className="font-bold text-rose-700">{money(totals.overdue)}</span></p>}
         </div>
+      )}
+      {fees.some((fee) => fee.due && ['agreed', 'earned', 'invoiced', 'part_paid'].includes(fee.status)) && (
+        <p className="mt-2 text-xs text-muted-foreground">A reminder is added to Tasks & reminders on the follow-up date for every unpaid agreed fee.</p>
+      )}
+      {history.length > 0 && (
+        <details className="mt-3 rounded-xl bg-slate-50 p-3 text-xs">
+          <summary className="cursor-pointer font-semibold">Fee change history ({history.length})</summary>
+          <ul className="mt-2 space-y-1.5">
+            {[...history].reverse().map((entry, index) => (
+              <li key={index} className="text-muted-foreground">
+                <span className="font-medium text-foreground">{new Date(entry.at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                {entry.by ? ` · ${entry.by}` : ''} — {entry.text}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );

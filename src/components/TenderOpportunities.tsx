@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, Landmark, Phone, Plus, Search, Trash2 } from 'lucide-react';
+import { Landmark, Phone, Plus, Search, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -14,7 +14,9 @@ import { Textarea } from '@/components/ui/textarea';
 import BoqTable, { boqTotalOf, cleanBoqRows, toBoqRows, type BoqRow } from '@/components/BoqTable';
 import CalcOptions, { cleanCalcOptions, netOf, toCalcOptions, type CalcOption } from '@/components/CalcOptions';
 import CompanySheets from '@/components/CompanySheets';
-import SuccessFees, { cleanFees, feeTotals, toFees, type FeeRow } from '@/components/SuccessFees';
+import SuccessFees, { cleanFees, describeFeeChanges, feeTotals, toFees, type FeeRow } from '@/components/SuccessFees';
+import LinkOrUpload from '@/components/LinkOrUpload';
+import TenderFeeSummary from '@/components/TenderFeeSummary';
 import DictateButton from '@/components/DictateButton';
 import TenderExcelTools from '@/components/TenderExcelTools';
 import ListEditor from '@/components/ListEditor';
@@ -90,7 +92,7 @@ const clean = (items: string[]) => items.map((entry) => entry.trim()).filter(Boo
 const numberText = (value: any) => (Number(value) > 0 ? String(value) : '');
 
 export default function TenderOpportunities() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -181,6 +183,31 @@ export default function TenderOpportunities() {
     setOpen(true);
   };
 
+  // Every unpaid, agreed fee with a follow-up date becomes a reminder in Tasks & reminders (best effort).
+  const syncFeeReminders = async (tenderId: string, site: string, company: string, feeLines: any[]) => {
+    try {
+      const marker = `tender-fee:${tenderId}:`;
+      const { data: existing } = await supabase.from('b2g_tasks' as any).select('description,completed_at').like('description', `${marker}%`);
+      const finished = new Set(((existing as any[]) || []).filter((task) => task.completed_at).map((task) => task.description));
+      await supabase.from('b2g_tasks' as any).delete().like('description', `${marker}%`).is('completed_at', null);
+      const reminders = feeLines
+        .map((fee, index) => ({ fee, key: `${marker}${index}:${fee.due}:${fee.amount}` }))
+        .filter(({ fee, key }) => fee.due && ['agreed', 'earned', 'invoiced', 'part_paid'].includes(fee.status) && fee.amount - fee.received > 0 && !finished.has(key))
+        .map(({ fee, key }) => ({
+          task_type: 'payment',
+          title: `Collect fee: ${[company, site].filter(Boolean).join(' · ')} — ${fee.label || 'success fee'} (${money(fee.amount - fee.received)})`,
+          description: key,
+          priority: 'medium',
+          due_at: new Date(`${fee.due}T10:00:00`).toISOString(),
+          assigned_to: user?.id,
+          created_by: user?.id,
+        }));
+      if (reminders.length) await supabase.from('b2g_tasks' as any).insert(reminders);
+    } catch {
+      /* reminders are a convenience; the tender itself is already saved */
+    }
+  };
+
   const save = async () => {
     const identity = form.site_name.trim() || form.authority_name.trim() || form.tender_title.trim();
     if (!identity) {
@@ -219,12 +246,19 @@ export default function TenderOpportunities() {
       mou_link: form.mou_link.trim() || null,
       success_fees: cleanFees(fees),
     };
+    // Keep a running history of every change to the fee lines.
+    const feeChanges = describeFeeChanges(Array.isArray(editing?.success_fees) ? editing.success_fees : [], payload.success_fees);
+    if (feeChanges.length) {
+      const now = new Date().toISOString();
+      const by = profile?.full_name || user?.email || '';
+      payload.fee_history = [...(Array.isArray(editing?.fee_history) ? editing.fee_history : []), ...feeChanges.map((text) => ({ at: now, by, text }))].slice(-60);
+    }
     setSaving(true);
     const { result, skipped } = await writeWithFallback(
       (body) =>
         editing
-          ? supabase.from('tender_opportunities' as any).update(body).eq('id', editing.id)
-          : supabase.from('tender_opportunities' as any).insert({ ...body, owner_id: user?.id }),
+          ? supabase.from('tender_opportunities' as any).update(body).eq('id', editing.id).select('id')
+          : supabase.from('tender_opportunities' as any).insert({ ...body, owner_id: user?.id }).select('id'),
       payload,
     );
     setSaving(false);
@@ -232,6 +266,8 @@ export default function TenderOpportunities() {
       toast({ title: 'Tender not saved', description: result.error.message, variant: 'destructive' });
       return;
     }
+    const savedId = editing?.id || (result.data as any)?.[0]?.id;
+    if (savedId) await syncFeeReminders(savedId, form.site_name.trim() || form.tender_title.trim() || authority, form.company_name.trim(), payload.success_fees);
     toast({ title: editing ? 'Tender updated' : 'Tender added', description: skippedMessage(skipped) });
     setOpen(false);
     load();
@@ -282,6 +318,8 @@ export default function TenderOpportunities() {
           </Button>
         </div>
       </div>
+
+      <TenderFeeSummary rows={rows} />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
@@ -456,15 +494,8 @@ export default function TenderOpportunities() {
           <Section title="">
             <BoqTable rows={boq} onChange={setBoq} />
             <div className="mt-3">
-              <Label text="BOQ file — Drive link (optional)">
-                <div className="flex gap-2">
-                  <Input type="url" value={form.boq_link} onChange={(e) => set('boq_link', e.target.value)} placeholder="Paste the Google Drive link of the BOQ" />
-                  {form.boq_link.trim() && (
-                    <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Open BOQ link" onClick={() => window.open(form.boq_link.trim(), '_blank', 'noopener')}>
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+              <Label text="BOQ file — Drive link or upload (optional)">
+                <LinkOrUpload value={form.boq_link} onChange={(value) => set('boq_link', value)} placeholder="Paste the Google Drive link, or upload the file" />
               </Label>
             </div>
           </Section>
@@ -472,17 +503,10 @@ export default function TenderOpportunities() {
           <Section title=""><CalcOptions options={calcs} onChange={setCalcs} boqTotal={boqTotalOf(boq)} /></Section>
 
           <Section title="">
-            <SuccessFees fees={fees} onChange={setFees} boqTotal={boqTotalOf(boq)} />
+            <SuccessFees fees={fees} onChange={setFees} boqTotal={boqTotalOf(boq)} history={Array.isArray(editing?.fee_history) ? editing.fee_history : []} />
             <div className="mt-3">
               <Label text="Signed MOU / agreement for this project — link (optional)">
-                <div className="flex gap-2">
-                  <Input type="url" value={form.mou_link} onChange={(e) => set('mou_link', e.target.value)} placeholder="Paste the Drive link of the signed MOU (PDF)" />
-                  {form.mou_link.trim() && (
-                    <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Open MOU link" onClick={() => window.open(form.mou_link.trim(), '_blank', 'noopener')}>
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+                <LinkOrUpload value={form.mou_link} onChange={(value) => set('mou_link', value)} placeholder="Paste the Drive link, or upload the signed MOU (PDF)" />
               </Label>
             </div>
           </Section>
