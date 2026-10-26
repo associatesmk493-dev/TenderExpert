@@ -72,12 +72,18 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
     const select = type === 'tax' ? '*,b2g_leads(organization_name),companies(name),proforma_invoices(invoice_number)' : '*,b2g_leads(organization_name),companies(name)';
     const [invoices, stageLeads, settings] = await Promise.all([
       supabase.from(table as any).select(select).order('created_at', { ascending: false }),
-      supabase.from('b2g_leads' as any).select('id,organization_name,contact_name,phone,email,city,state,company_id,companies(gst_number)').eq('stage', 'generate_pi').order('organization_name'),
+      supabase.from('b2g_leads' as any).select('id,organization_name,contact_name,phone,email,city,state,company_id,gst_number,companies(gst_number)').eq('stage', 'generate_pi').order('organization_name'),
       supabase.from('invoice_company_settings' as any).select('*').limit(1).maybeSingle(),
     ]);
     if (invoices.error) toast({ title: `${label}s could not load`, description: invoices.error.message, variant: 'destructive' });
     setRows((invoices.data as any[]) || []);
-    setLeads((stageLeads.data as any[]) || []);
+    let leadRows = (stageLeads.data as any[]) || [];
+    if (stageLeads.error) {
+      // The lead GST column may not exist yet — load the clients without it.
+      const retry = await supabase.from('b2g_leads' as any).select('id,organization_name,contact_name,phone,email,city,state,company_id,companies(gst_number)').eq('stage', 'generate_pi').order('organization_name');
+      leadRows = (retry.data as any[]) || [];
+    }
+    setLeads(leadRows);
     setCompany((settings.data as any) || null);
     if (type === 'proforma') {
       const taxes = await supabase.from('tax_invoices' as any).select('id,invoice_number,proforma_invoice_id').not('proforma_invoice_id', 'is', null);
@@ -136,7 +142,7 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       lead_id: leadId,
       bill_to_name: lead?.organization_name || '',
       bill_to_contact: lead?.contact_name || '',
-      bill_to_gst: lead?.companies?.gst_number || '',
+      bill_to_gst: lead?.gst_number || lead?.companies?.gst_number || '',
       bill_to_phone: lead?.phone || '',
       bill_to_email: lead?.email || '',
       bill_to_address: [lead?.city, lead?.state].filter(Boolean).join(', '),
@@ -187,6 +193,10 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
       payload,
     );
     setSaving(false);
+    // Remember the client's GST on the lead so the next invoice is filled in automatically.
+    if (!result.error && form.lead_id && payload.bill_to_gst && payload.bill_to_gst !== lead?.gst_number) {
+      await supabase.from('b2g_leads' as any).update({ gst_number: payload.bill_to_gst }).eq('id', form.lead_id);
+    }
     if (result.error) return toast({ title: `${label} not saved`, description: result.error.message, variant: 'destructive' });
     toast({ title: editing ? `${label} updated` : `${label} created`, description: skippedMessage(skipped) });
     setOpen(false);
@@ -331,7 +341,7 @@ export default function Invoices({ type }: { type: InvoiceKind }) {
               <Field label="Invoice date"><Input type="date" value={form.invoice_date} onChange={(e) => setForm({ ...form, invoice_date: e.target.value })} /></Field>
               <Field label="Client / company name"><Input value={form.bill_to_name} onChange={(e) => setForm({ ...form, bill_to_name: e.target.value })} /></Field>
               <Field label="Contact person"><Input value={form.bill_to_contact} onChange={(e) => setForm({ ...form, bill_to_contact: e.target.value })} /></Field>
-              <Field label="Client GST no."><Input value={form.bill_to_gst} onChange={(e) => setForm({ ...form, bill_to_gst: e.target.value })} placeholder="e.g. 27ABCDE1234F1Z5" /></Field>
+              <Field label="Client GST no."><Input value={form.bill_to_gst} onChange={(e) => setForm({ ...form, bill_to_gst: e.target.value })} placeholder="e.g. 27ABCDE1234F1Z5" />{!form.bill_to_gst.trim() && <p className="mt-1 text-[11px] text-amber-600">Not filled — the client's GST number will not appear on this invoice.</p>}</Field>
               <Field label="Phone"><Input value={form.bill_to_phone} onChange={(e) => setForm({ ...form, bill_to_phone: e.target.value })} /></Field>
               <Field label="Email"><Input type="email" value={form.bill_to_email} onChange={(e) => setForm({ ...form, bill_to_email: e.target.value })} /></Field>
               <Field label="Address"><Textarea rows={2} value={form.bill_to_address} onChange={(e) => setForm({ ...form, bill_to_address: e.target.value })} /></Field>

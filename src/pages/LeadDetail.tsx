@@ -426,6 +426,7 @@ export default function LeadDetail() {
               <div className="grid sm:grid-cols-2 gap-4 text-sm">
                 <Info label="Phone" value={lead.phone} />
                 <Info label="Email" value={lead.email || "—"} />
+                <Info label="GST number" value={lead.gst_number || "—"} />
                 <Info
                   label="Location"
                   value={
