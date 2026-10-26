@@ -129,7 +129,7 @@ export default function Leads() {
                     <div className="-mt-1 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-indigo-50 px-3 py-1.5 text-[11px] font-medium text-indigo-700">
                       <Megaphone className="h-3 w-3" />
                       <span>Exported from campaign: {l.campaign_name}</span>
-                      {(l.event_name || l.campaign_name) && <span>· Event: {l.event_name || l.campaign_name}</span>}
+                      {l.event_name && l.event_name !== l.campaign_name && <span>· Event: {l.event_name}</span>}
                     </div>
                   )}
                   <div className="flex justify-between">

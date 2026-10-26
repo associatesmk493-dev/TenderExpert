@@ -4,6 +4,7 @@ import LeadOrdersManager from "@/components/LeadOrdersManager";
 import LeadFollowUpManager from "@/components/LeadFollowUpManager";
 import LeadQuotationTimeline from "@/components/LeadQuotationTimeline";
 import LeadCallOutcome from "@/components/LeadCallOutcome";
+import LeadContacts from "@/components/LeadContacts";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -249,11 +250,15 @@ export default function LeadDetail() {
     100;
   const receivedShown =
     paymentsReceived > 0 ? paymentsReceived : Number(lead.received_amount || 0);
+  const goAhead = Number(lead.probability) >= 100;
   const commercialPatch = (value: number, rate: number) => ({
     proposal_value: value,
     proposal_gst_rate: rate,
     total_amount: Math.round(value * (1 + rate / 100) * 100) / 100,
-    expected_revenue: (value * Number(lead.probability)) / 100,
+    // Once the client has given a go-ahead, "expected" is the amount they agreed, not a % of the proposal.
+    expected_revenue: goAhead
+      ? Number(lead.expected_revenue || 0)
+      : (value * Number(lead.probability)) / 100,
   });
   return (
     <div className="min-h-full bg-slate-50/60 p-4 md:p-7">
@@ -268,9 +273,9 @@ export default function LeadDetail() {
         <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-700">
           <Megaphone className="h-4 w-4" />
           <span>Exported from campaign: {lead.campaign_name}</span>
-          <span>
-            · Event: {lead.event_name || lead.campaign_name}
-          </span>
+          {lead.event_name && lead.event_name !== lead.campaign_name && (
+            <span>· Event: {lead.event_name}</span>
+          )}
         </div>
       )}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
@@ -455,6 +460,10 @@ export default function LeadDetail() {
               )}
             </CardContent>
           </Card>
+          <LeadContacts
+            contacts={lead.contacts}
+            onSave={(contacts) => update({ contacts })}
+          />
           <Card className="border-0 shadow-sm">
             <CardContent className="p-5">
               <div className="mb-4">
@@ -737,30 +746,54 @@ export default function LeadDetail() {
               </div>
               <div className="mt-4">
                 <label className="text-xs text-muted-foreground">
-                  Probability
+                  Client go-ahead
                 </label>
                 <Select
-                  value={String(lead.probability)}
+                  value={goAhead ? "yes" : "no"}
                   onValueChange={(v) =>
-                    update({
-                      probability: Number(v),
-                      expected_revenue:
-                        (Number(lead.proposal_value) * Number(v)) / 100,
-                    })
+                    update(
+                      v === "yes"
+                        ? {
+                            probability: 100,
+                            expected_revenue: Number(lead.expected_revenue) || 0,
+                          }
+                        : { probability: 0, expected_revenue: 0 },
+                    )
                   }
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((x) => (
-                      <SelectItem key={x} value={String(x)}>
-                        {x}%
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="no">Not yet</SelectItem>
+                    <SelectItem value="yes">Go-ahead received</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {goAhead && (
+                <label className="mt-3 block">
+                  <span className="text-xs text-muted-foreground">
+                    Amount agreed by the client (advance / approved)
+                  </span>
+                  <Input
+                    key={String(lead.expected_revenue)}
+                    className="mt-1"
+                    type="number"
+                    min="0"
+                    defaultValue={lead.expected_revenue || 0}
+                    onBlur={(e) =>
+                      update({ expected_revenue: Number(e.target.value || 0) })
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="mt-1 text-xs font-medium text-primary hover:underline"
+                    onClick={() => update({ expected_revenue: proposalTotal })}
+                  >
+                    Use proposal total ({money(proposalTotal)})
+                  </button>
+                </label>
+              )}
               <p className="font-bold mt-4">
                 {money(lead.expected_revenue)}{" "}
                 <span className="font-normal text-xs text-muted-foreground">
@@ -768,8 +801,8 @@ export default function LeadDetail() {
                 </span>
               </p>
               <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                Expected = Proposal value × Probability. Raise the probability as
-                the deal moves forward; the dashboard uses it to forecast
+                Expected stays ₹0 until the client gives a go-ahead. Then enter
+                the amount they have agreed — the dashboard uses it to forecast
                 revenue.
               </p>
               <div className="mt-5 space-y-3 border-t pt-4">

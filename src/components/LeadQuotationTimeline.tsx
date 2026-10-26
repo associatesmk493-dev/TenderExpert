@@ -136,7 +136,7 @@ export default function LeadQuotationTimeline({
     if (["draft", "sent", "viewed", "accepted"].includes(form.status)) {
       const { data: current } = await supabase
         .from("b2g_leads" as any)
-        .select("probability")
+        .select("probability,expected_revenue")
         .eq("id", leadId)
         .single();
       const rate = Number(form.gst_rate) || 0;
@@ -150,8 +150,11 @@ export default function LeadQuotationTimeline({
           proposal_value: subtotal,
           proposal_gst_rate: rate,
           total_amount: Math.round(subtotal * (1 + rate / 100) * 100) / 100,
+          // After the client's go-ahead, expected is the agreed amount and is left alone.
           expected_revenue:
-            (subtotal * Number((current as any)?.probability ?? 20)) / 100,
+            Number((current as any)?.probability ?? 0) >= 100
+              ? Number((current as any)?.expected_revenue || 0)
+              : (subtotal * Number((current as any)?.probability ?? 0)) / 100,
         },
       );
       synced = !result.error;

@@ -16,6 +16,8 @@ import CalcOptions, { cleanCalcOptions, netOf, toCalcOptions, type CalcOption } 
 import CompanySheets from '@/components/CompanySheets';
 import SuccessFees, { cleanFees, describeFeeChanges, feeTotals, toFees, type FeeRow } from '@/components/SuccessFees';
 import LinkOrUpload from '@/components/LinkOrUpload';
+import DeptNotes, { toDeptNotes, type DeptNote } from '@/components/DeptNotes';
+import PartySheets from '@/components/PartySheets';
 import TenderFeeSummary from '@/components/TenderFeeSummary';
 import DictateButton from '@/components/DictateButton';
 import TenderExcelTools from '@/components/TenderExcelTools';
@@ -108,7 +110,9 @@ export default function TenderOpportunities() {
   const [boq, setBoq] = useState<BoqRow[]>(toBoqRows([]));
   const [calcs, setCalcs] = useState<CalcOption[]>([]);
   const [fees, setFees] = useState<FeeRow[]>([]);
-  const [view, setView] = useState<'projects' | 'companies'>('projects');
+  const [deptNotes, setDeptNotes] = useState<DeptNote[]>([]);
+  const [partyFocus, setPartyFocus] = useState('');
+  const [view, setView] = useState<'projects' | 'companies' | 'parties'>('projects');
   const [stageFilter, setStageFilter] = useState('all');
   const [saving, setSaving] = useState(false);
 
@@ -145,6 +149,7 @@ export default function TenderOpportunities() {
     setBoq(toBoqRows([]));
     setCalcs([]);
     setFees([]);
+    setDeptNotes([]);
     setOpen(true);
   };
 
@@ -180,6 +185,7 @@ export default function TenderOpportunities() {
     setBoq(toBoqRows(row.boq_items));
     setCalcs(toCalcOptions(row.calculations));
     setFees(toFees(row.success_fees));
+    setDeptNotes(toDeptNotes(row.dept_notes));
     setOpen(true);
   };
 
@@ -245,6 +251,7 @@ export default function TenderOpportunities() {
       boq_link: form.boq_link.trim() || null,
       mou_link: form.mou_link.trim() || null,
       success_fees: cleanFees(fees),
+      dept_notes: deptNotes,
     };
     // Keep a running history of every change to the fee lines.
     const feeChanges = describeFeeChanges(Array.isArray(editing?.success_fees) ? editing.success_fees : [], payload.success_fees);
@@ -345,16 +352,17 @@ export default function TenderOpportunities() {
       </div>
 
       <div className="mb-4 inline-flex rounded-xl bg-white p-1 shadow-sm">
-        {(['projects', 'companies'] as const).map((value) => (
-          <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-4 py-1.5 text-sm font-medium ${view === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>
-            {value === 'projects' ? 'Projects' : 'By company'}
+        {(['projects', 'companies', 'parties'] as const).map((value) => (
+          <button key={value} type="button" onClick={() => { setView(value); if (value !== 'parties') setPartyFocus(''); }} className={`rounded-lg px-4 py-1.5 text-sm font-medium ${view === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>
+            {value === 'projects' ? 'Projects' : value === 'companies' ? 'By company' : 'Parties'}
           </button>
         ))}
       </div>
 
       {view === 'companies' && <CompanySheets rows={list} stageLabel={stageLabel} onOpen={openEdit} />}
+      {view === 'parties' && <PartySheets rows={list} focus={partyFocus} stageLabel={stageLabel} onOpen={openEdit} />}
 
-      <div className={`space-y-3 ${view === 'companies' ? 'hidden' : ''}`}>
+      <div className={`space-y-3 ${view !== 'projects' ? 'hidden' : ''}`}>
         {list.map((row) => {
           const statuses = textList(row.status_log);
           const latest = statuses[statuses.length - 1];
@@ -382,7 +390,20 @@ export default function TenderOpportunities() {
                     {latest && <span className="font-medium text-foreground">Status: {latest}</span>}
                     {row.approved_fund && <span>Fund: {Number(row.approved_fund) > 0 ? money(Number(row.approved_fund)) : row.approved_fund}</span>}
                     {Number(row.estimated_value) > 0 && <span>Tentative {money(Number(row.estimated_value))}</span>}
-                    {textList(row.parties).length > 0 && <span>{textList(row.parties).length} parties</span>}
+                    {textList(row.parties).length > 0 && (
+                      <span className="flex flex-wrap items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                        {textList(row.parties).slice(0, 3).map((party) => (
+                          <button key={party} type="button" className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100" title="Show this party's projects" onClick={() => { setPartyFocus(party); setView('parties'); }}>
+                            {party}
+                          </button>
+                        ))}
+                        {textList(row.parties).length > 3 && (
+                          <button type="button" className="text-[11px] font-medium text-violet-700 hover:underline" onClick={() => { setPartyFocus(textList(row.parties)[3]); setView('parties'); }}>
+                            +{textList(row.parties).length - 3} more
+                          </button>
+                        )}
+                      </span>
+                    )}
                     {fee.potential > 0 && <span>Fee {money(fee.potential)} · received {money(fee.received)}</span>}
                     {row.contact_no && (
                       <span className="flex items-center gap-1">
@@ -437,9 +458,9 @@ export default function TenderOpportunities() {
                   <SelectContent>{STAGES.map((stage) => <SelectItem key={stage.value} value={stage.value}>{stage.label}</SelectItem>)}</SelectContent>
                 </Select>
               </Label>
-              <Label text="Company we work for (manufacturer)">
-                <Input list="tender-companies" value={form.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="e.g. TMVT" />
-                <datalist id="tender-companies">{Array.from(new Set(rows.map((row) => String(row.company_name || '').trim()).filter(Boolean))).map((name) => <option key={name} value={name} />)}</datalist>
+              <Label text="Department">
+                <Input list="tender-departments" value={form.authority_name} onChange={(e) => set('authority_name', e.target.value)} placeholder="e.g. CPWD" />
+                <datalist id="tender-departments">{Array.from(new Set(rows.map((row) => String(row.authority_name || '').trim()).filter(Boolean))).map((name) => <option key={name} value={name} />)}</datalist>
               </Label>
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -450,7 +471,11 @@ export default function TenderOpportunities() {
               <Label text="Site (location)"><Input value={form.site_name} onChange={(e) => set('site_name', e.target.value)} /></Label>
               <Label text="Division"><Input value={form.division} onChange={(e) => set('division', e.target.value)} /></Label>
               <Label text="Scope of work"><Input value={form.tender_title} onChange={(e) => set('tender_title', e.target.value)} placeholder="e.g. STP plant 50 KLD" /></Label>
-              <Label text="Department / client"><Input value={form.authority_name} onChange={(e) => set('authority_name', e.target.value)} /></Label>
+              <Label text="Plant capacity"><Input value={form.plant_capacity} onChange={(e) => set('plant_capacity', e.target.value)} placeholder="e.g. 135 KLD" /></Label>
+              <Label text="Company we work for (manufacturer)">
+                <Input list="tender-companies" value={form.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="e.g. TMVT" />
+                <datalist id="tender-companies">{Array.from(new Set(rows.map((row) => String(row.company_name || '').trim()).filter(Boolean))).map((name) => <option key={name} value={name} />)}</datalist>
+              </Label>
               <Label text="Contact no"><Input type="tel" value={form.contact_no} onChange={(e) => set('contact_no', e.target.value)} /></Label>
               <Label text="Tentative project cost"><Input type="number" min="0" value={form.estimated_value} onChange={(e) => set('estimated_value', e.target.value)} />{boqTotalOf(boq) > 0 && Number(form.estimated_value) !== boqTotalOf(boq) && (<button type="button" className="mt-1 text-xs font-medium text-primary hover:underline" onClick={() => set('estimated_value', String(boqTotalOf(boq)))}>Use BOQ total ({money(boqTotalOf(boq))})</button>)}</Label>
               <Label text="Approved fund"><Input value={form.approved_fund} onChange={(e) => set('approved_fund', e.target.value)} placeholder="Amount or “pending”" /></Label>
@@ -458,6 +483,22 @@ export default function TenderOpportunities() {
             </div>
             <div className="mt-4">
               <ListEditor label="Office" hint="officials, e.g. EE – name, AE – name" items={offices} onChange={setOffices} placeholder="Designation – name" />
+            </div>
+          </Section>
+
+          <Section title="Technical and decision details (optional)">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Label text="Sanctioned budget"><Input type="number" min="0" value={form.sanctioned_budget} onChange={(e) => set('sanctioned_budget', e.target.value)} /></Label>
+              <Label text="Decision-maker"><Input value={form.decision_maker_name} onChange={(e) => set('decision_maker_name', e.target.value)} /></Label>
+              <Label text="Existing problem"><Textarea rows={2} value={form.existing_problem} onChange={(e) => set('existing_problem', e.target.value)} /></Label>
+              <Label text="Proposed technology"><Textarea rows={2} value={form.proposed_technology} onChange={(e) => set('proposed_technology', e.target.value)} /></Label>
+              <Label text="BOQ status">
+                <Select value={form.boq_status} onValueChange={(value) => set('boq_status', value)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{BOQ_STATUS.map((value) => <SelectItem key={value} value={value}>{nice(value)}</SelectItem>)}</SelectContent>
+                </Select>
+              </Label>
+              <Label text="Next action"><Input value={form.next_action} onChange={(e) => set('next_action', e.target.value)} /></Label>
             </div>
           </Section>
 
@@ -492,6 +533,10 @@ export default function TenderOpportunities() {
           </Section>
 
           <Section title="">
+            <DeptNotes notes={deptNotes} onChange={setDeptNotes} author={profile?.full_name || user?.email || ''} />
+          </Section>
+
+          <Section title="">
             <BoqTable rows={boq} onChange={setBoq} />
             <div className="mt-3">
               <Label text="BOQ file — Drive link or upload (optional)">
@@ -515,23 +560,6 @@ export default function TenderOpportunities() {
             <Textarea rows={3} value={form.conversation} onChange={(e) => set('conversation', e.target.value)} placeholder="What the party said — offers, advance, commitments…" />
             <div className="mt-2 flex justify-end">
               <DictateButton onText={(spoken) => set('conversation', form.conversation ? `${form.conversation.trimEnd()} ${spoken}` : spoken)} />
-            </div>
-          </Section>
-
-          <Section title="Technical and decision details (optional)">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Label text="Plant capacity"><Input value={form.plant_capacity} onChange={(e) => set('plant_capacity', e.target.value)} /></Label>
-              <Label text="Sanctioned budget"><Input type="number" min="0" value={form.sanctioned_budget} onChange={(e) => set('sanctioned_budget', e.target.value)} /></Label>
-              <Label text="Existing problem"><Textarea rows={2} value={form.existing_problem} onChange={(e) => set('existing_problem', e.target.value)} /></Label>
-              <Label text="Proposed technology"><Textarea rows={2} value={form.proposed_technology} onChange={(e) => set('proposed_technology', e.target.value)} /></Label>
-              <Label text="BOQ status">
-                <Select value={form.boq_status} onValueChange={(value) => set('boq_status', value)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{BOQ_STATUS.map((value) => <SelectItem key={value} value={value}>{nice(value)}</SelectItem>)}</SelectContent>
-                </Select>
-              </Label>
-              <Label text="Decision-maker"><Input value={form.decision_maker_name} onChange={(e) => set('decision_maker_name', e.target.value)} /></Label>
-              <div className="sm:col-span-2"><Label text="Next action"><Input value={form.next_action} onChange={(e) => set('next_action', e.target.value)} /></Label></div>
             </div>
           </Section>
 
