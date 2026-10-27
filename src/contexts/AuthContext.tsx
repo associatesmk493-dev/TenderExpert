@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { AppRole, Profile } from '@/types/crm';
@@ -35,6 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const manualSignOut = useRef(false);
 
   const fetchUserData = async (userId: string) => {
     const [profileRes, roleRes] = await Promise.all([
@@ -84,7 +85,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // A sign-out we did not ask for (another tab refreshing the token, a brief storage glitch) is
+      // double-checked before the user is thrown back to the login page.
+      if (event === 'SIGNED_OUT' && !manualSignOut.current) {
+        setTimeout(async () => {
+          const { data } = await supabase.auth.getSession();
+          if (data.session) {
+            setSession(data.session);
+            setUser(data.session.user);
+          } else {
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setRole(null);
+          }
+          setLoading(false);
+        }, 1000);
+        return;
+      }
+      manualSignOut.current = false;
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -138,6 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     if (user) LeadsCache.clear(user.id);
     DashboardCache.clear();
+    manualSignOut.current = true;
     await supabase.auth.signOut();
     setProfile(null);
     setRole(null);

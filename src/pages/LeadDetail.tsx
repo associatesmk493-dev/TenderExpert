@@ -286,7 +286,9 @@ export default function LeadDetail() {
           <div>
             <h1 className="text-2xl font-bold">{lead.organization_name}</h1>
             <p className="text-muted-foreground">
-              {lead.contact_name} · {lead.industry}
+              {lead.contact_name}
+              {lead.contact_designation ? ` (${lead.contact_designation})` : ""} ·{" "}
+              {lead.industry}
             </p>
             <div className="flex flex-wrap gap-2 mt-2">
               <Badge>{title(lead.pipeline)}</Badge>

@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { SOURCE_PORTALS, type SourcePortal } from '@/types/crm';
+import { skippedMessage, writeManyWithFallback } from '@/lib/writeWithFallback';
 import { ArrowLeft, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Download, ArrowRight, Users } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
@@ -23,21 +24,54 @@ interface ParsedLead {
   funnel_stage?: string; lead_type?: string;
   assigned_to_name?: string;
   assigned_to_email?: string;
+  designation?: string; website?: string; city?: string; state?: string;
+  pipeline?: string; heat?: string; gst_rate?: string; gst_number?: string;
+  expected_close_date?: string; next_follow_up?: string;
+  boq_link?: string; event_name?: string;
+  extra_contacts?: { name: string; designation: string; phone: string; email: string; note: string }[];
   valid: boolean; error?: string;
   _rowIndex?: number;
 }
+
+type ExtraContactField =
+  | 'contact2_name' | 'contact2_designation' | 'contact2_phone' | 'contact2_email'
+  | 'contact3_name' | 'contact3_designation' | 'contact3_phone' | 'contact3_email';
 
 type LeadField =
   | 'customer_name' | 'phone' | 'email' | 'car_interest'
   | 'notes' | 'budget' | 'region' | 'business_type' | 'industry'
   | 'owner_name' | 'company' | 'quoted_amount'
-  | 'funnel_stage' | 'lead_type' | 'assigned_to_name' | 'assigned_to_email' | 'ignore';
+  | 'funnel_stage' | 'lead_type' | 'assigned_to_name' | 'assigned_to_email'
+  | 'designation' | 'website' | 'city' | 'state' | 'pipeline' | 'heat'
+  | 'gst_rate' | 'gst_number' | 'expected_close_date' | 'next_follow_up'
+  | 'boq_link' | 'event_name' | ExtraContactField | 'ignore';
 
 const FIELD_OPTIONS: { value: LeadField; label: string; required?: boolean }[] = [
   { value: 'ignore', label: '— Ignore —' },
-  { value: 'customer_name', label: 'Customer Name' },
+  { value: 'company', label: 'Organization / Company Name' },
+  { value: 'customer_name', label: 'Contact Person' },
+  { value: 'designation', label: 'Designation' },
   { value: 'phone', label: 'Phone Number' },
   { value: 'email', label: 'Email' },
+  { value: 'website', label: 'Website' },
+  { value: 'gst_number', label: 'GST Number' },
+  { value: 'city', label: 'City' },
+  { value: 'state', label: 'State' },
+  { value: 'pipeline', label: 'Pipeline (Brand Approval / Govt BD / Tender)' },
+  { value: 'heat', label: 'Heat (Hot / Warm / Cold)' },
+  { value: 'gst_rate', label: 'GST Rate %' },
+  { value: 'expected_close_date', label: 'Expected Close Date' },
+  { value: 'next_follow_up', label: 'Next Follow-up Date' },
+  { value: 'boq_link', label: 'BOQ / Drive Link' },
+  { value: 'event_name', label: 'Event Name' },
+  { value: 'contact2_name', label: 'Contact 2 — Name' },
+  { value: 'contact2_designation', label: 'Contact 2 — Designation' },
+  { value: 'contact2_phone', label: 'Contact 2 — Phone' },
+  { value: 'contact2_email', label: 'Contact 2 — Email' },
+  { value: 'contact3_name', label: 'Contact 3 — Name' },
+  { value: 'contact3_designation', label: 'Contact 3 — Designation' },
+  { value: 'contact3_phone', label: 'Contact 3 — Phone' },
+  { value: 'contact3_email', label: 'Contact 3 — Email' },
   { value: 'car_interest', label: 'Equipment / Product Interest' },
   { value: 'notes', label: 'Notes / Remark' },
   { value: 'budget', label: 'Budget' },
@@ -113,10 +147,76 @@ const parseBusinessType = (raw: string): string | null => {
   return null;
 };
 
-const SAMPLE_CSV = `customer_name,company,phone,email,industry,equipment_interest,quoted_amount,notes
-Rahul Sharma,AquaTech Industries,9876543210,rahul@aquatech.in,Water & Wastewater,Brand Approval,250000,Requires government product approval
-Priya Singh,InfraBuild Solutions,8765432109,priya@infrabuild.in,Infrastructure,Tender Consultancy,500000,Interested in upcoming state tenders
-Amit Patel,MediPrime Healthcare,7654321098,amit@mediprime.in,Healthcare,CPWD Class Registration,180000,Needs registration support`;
+// Same fields as "Add opportunity", in the same order, so the sheet can be filled in and imported as it is.
+const SAMPLE_HEADERS = [
+  'organization_name', 'contact_person', 'designation', 'phone', 'email', 'website', 'gst_number',
+  'industry', 'city', 'state', 'pipeline', 'services', 'heat', 'proposal_value', 'gst_rate',
+  'expected_close_date', 'next_follow_up_date', 'boq_link', 'event_name', 'notes',
+  'contact2_name', 'contact2_designation', 'contact2_phone', 'contact2_email',
+  'contact3_name', 'contact3_designation', 'contact3_phone', 'contact3_email',
+];
+const SAMPLE_ROWS = [
+  ['AquaTech Industries Pvt Ltd', 'Rahul Sharma', 'Branch Head', '9876543210', 'rahul@aquatech.in', 'www.aquatech.in', '07ABCDE1234F1Z5',
+    'Water & Wastewater', 'Noida', 'Uttar Pradesh', 'Brand Approval', 'CPWD Class Registration', 'warm', '250000', '18',
+    '2026-12-31', '2026-11-05', 'https://drive.google.com/your-link', 'Raipur Exhibition 2026', 'Requires government product approval',
+    'Neha Verma', 'Director', '9812345678', 'neha@aquatech.in', '', '', '', ''],
+  ['InfraBuild Solutions', 'Priya Singh', 'Procurement Manager', '8765432109', 'priya@infrabuild.in', '', '',
+    'Infrastructure', 'Jaipur', 'Rajasthan', 'Tender Consultancy', 'Tender Consultancy', 'hot', '500000', '18',
+    '', '2026-11-02', '', '', 'Interested in upcoming state tenders',
+    '', '', '', '', '', '', '', ''],
+];
+const csvCell = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+const SAMPLE_CSV = [SAMPLE_HEADERS, ...SAMPLE_ROWS].map((row) => row.map(csvCell).join(',')).join('\n');
+
+// One phone number out of a cell: handles "+91 98765 43210", 9876543210.0, 9.87654E+09 and "98765 43210 / 98123 45678".
+const toPhone = (value: string): string => {
+  let s = value.trim();
+  if (/^\d+(\.\d+)?e\+?\d+$/i.test(s)) s = Number(s).toFixed(0);
+  s = s.replace(/\.0+$/, '');
+  let phone = s.replace(/[^0-9]/g, '');
+  if (phone.startsWith('0091')) phone = phone.slice(2);
+  if (phone.startsWith('091')) phone = phone.slice(1);
+  if (phone.startsWith('0') && phone.length === 11) phone = '91' + phone.slice(1);
+  if (phone.length === 10) phone = '91' + phone;
+  if (phone.length === 11 && phone.startsWith('1')) phone = '9' + phone;
+  return phone.length >= 10 && phone.length <= 15 ? phone : '';
+};
+const pickPhone = (raw: string): string => {
+  for (const part of raw.split(/[/;,|\n]+/)) {
+    const phone = toPhone(part);
+    if (phone) return phone;
+  }
+  return toPhone(raw);
+};
+
+const pad = (n: number) => String(n).padStart(2, '0');
+// yyyy-mm-dd, dd/mm/yyyy, dd-mm-yyyy or an Excel date number → yyyy-mm-dd.
+const parseDate = (raw: string): string | null => {
+  const v = raw.trim();
+  if (!v) return null;
+  if (/^\d{5}(\.\d+)?$/.test(v)) {
+    const date = new Date(Math.round((Number(v) - 25569) * 86400 * 1000));
+    return Number.isNaN(date.getTime()) ? null : `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+  }
+  let m = v.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) return `${m[1]}-${pad(Number(m[2]))}-${pad(Number(m[3]))}`;
+  m = v.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+  if (m) return `${m[3].length === 2 ? `20${m[3]}` : m[3]}-${pad(Number(m[2]))}-${pad(Number(m[1]))}`;
+  return null;
+};
+
+const parsePipeline = (raw: string): string | null => {
+  const v = raw.toLowerCase();
+  if (!v.trim()) return null;
+  if (v.includes('tender')) return 'tender_consultancy';
+  if (v.includes('govern') || v.includes('gov') || v.includes('business dev') || v.includes('bd')) return 'government_business_development';
+  if (v.includes('brand') || v.includes('approval')) return 'brand_approval';
+  return null;
+};
+const parseHeat = (raw: string): string | null => {
+  const v = raw.toLowerCase();
+  return v.includes('hot') ? 'hot' : v.includes('warm') ? 'warm' : v.includes('cold') ? 'cold' : null;
+};
 
 const splitCsvLine = (line: string): string[] => {
   const cols: string[] = [];
@@ -133,9 +233,31 @@ const splitCsvLine = (line: string): string[] => {
 
 const autoDetect = (header: string): LeadField => {
   const h = header.toLowerCase().trim();
-  if (h === 'name' || h === 'customer name' || (h.includes('name') && !h.includes('assignee') && !h.includes('owner') && !h.includes('manager') && !h.includes('poc') && !h.includes('company'))) return 'customer_name';
-  if (h === 'phone' || h === 'mobile' || h === 'phone2' || h.includes('mobile') || h.includes('contact')) return 'phone';
-  if ((h.includes('email') || h.includes('mail')) && !h.includes('assignee') && !h.includes('manager')) return 'email';
+  // Same text without punctuation, so "Phone No." / "phone_no" / "Phone-No" all read alike.
+  const n = h.replace(/[^a-z0-9]+/g, ' ').trim();
+  const extra = n.match(/^contact ?([23]) ?(name|person|designation|title|phone|mobile|email|mail)/);
+  if (extra) {
+    const kind = /name|person/.test(extra[2]) ? 'name' : /designation|title/.test(extra[2]) ? 'designation' : /phone|mobile/.test(extra[2]) ? 'phone' : 'email';
+    return `contact${extra[1]}_${kind}` as LeadField;
+  }
+  if (!n.includes('assign') && !n.includes('manager') && (n.includes('email') || n.includes('mail'))) return 'email';
+  if (/\bgstin\b|gst (number|no)|gst ?in/.test(n)) return 'gst_number';
+  if (/gst (rate|percent)|^gst$|gst ?%/.test(n)) return 'gst_rate';
+  if (n.includes('boq') || n.includes('drive link')) return 'boq_link';
+  if (n.includes('website') || n.includes('web site') || n === 'url') return 'website';
+  if (/(organi[sz]ation|company|firm|institution)( name)?$/.test(n) && !n.includes('assign')) return 'company';
+  if (/designation|job title|position|^title$/.test(n)) return 'designation';
+  if (/(phone|mobile|whatsapp|telephone|\bmob\b|\bcell\b|contact (no|number|num)|\btel\b)/.test(n) && !n.includes('assign')) return 'phone';
+  if (n === 'city') return 'city';
+  if (n === 'state') return 'state';
+  if (n === 'pipeline') return 'pipeline';
+  if (n === 'heat' || n === 'temperature') return 'heat';
+  if (n.includes('expected close') || n.includes('close date')) return 'expected_close_date';
+  if (n.includes('follow up') || n.includes('followup')) return 'next_follow_up';
+  if (n.includes('event')) return 'event_name';
+  if (n.includes('proposal value') || n.includes('proposal amount')) return 'quoted_amount';
+  if (n === 'services' || n === 'service' || n.includes('service interest')) return 'car_interest';
+  if (n === 'contact person' || n === 'contact name' || n === 'person name' || n === 'customer name' || n === 'name' || (h.includes('name') && !h.includes('assignee') && !h.includes('owner') && !h.includes('manager') && !h.includes('poc') && !h.includes('company'))) return 'customer_name';
   if (h === 'status' || h === 'funnel stage' || h === 'funnel_stage' || h === 'stage') return 'funnel_stage';
   if (h === 'lead type' || h === 'lead_type' || h === 'customer type' || h === 'customer_type') return 'lead_type';
   if (h.includes('requirement') || h.includes('equipment') || h === 'product type' || h === 'product_type' || h.includes('interest') || h.includes('machine') || h.includes('item')) return 'car_interest';
@@ -202,18 +324,13 @@ const ImportLeads = () => {
       const name = get('customer_name', cols);
       const rawPhone = get('phone', cols);
 
-      // Normalize phone: strip all non-digits, then handle country code
-      let phone = rawPhone.replace(/[^0-9]/g, '');
-      if (phone.startsWith('0091')) phone = phone.slice(2);
-      if (phone.startsWith('091'))  phone = phone.slice(1);
-      if (phone.startsWith('0') && phone.length === 11) phone = '91' + phone.slice(1);
-      if (phone.length === 10) phone = '91' + phone;
-      if (phone.length === 11 && phone.startsWith('1')) phone = '9' + phone;
+      // Normalize phone (handles country code, Excel number formats and several numbers in one cell)
+      let phone = pickPhone(rawPhone);
 
       // If phone is still missing or invalid → generate unique placeholder
       // so the record still imports and can be corrected later
       let phoneNote = '';
-      if (!rawPhone.trim() || phone.length < 10 || phone.length > 15) {
+      if (!phone) {
         phone = `NOPHONE_${batchTs}_${rowIdx + 2}`;
         phoneNote = rawPhone.trim()
           ? `Invalid phone "${rawPhone}" — placeholder assigned`
@@ -235,8 +352,30 @@ const ImportLeads = () => {
       const assigned_to_name = get('assigned_to_name', cols) || undefined;
       const assigned_to_email = get('assigned_to_email', cols) || undefined;
       const finalName = name || owner_name || company || 'Unknown';
+      const extra_contacts = ['2', '3']
+        .map((k) => ({
+          name: get(`contact${k}_name` as LeadField, cols),
+          designation: get(`contact${k}_designation` as LeadField, cols),
+          phone: pickPhone(get(`contact${k}_phone` as LeadField, cols)) || get(`contact${k}_phone` as LeadField, cols),
+          email: get(`contact${k}_email` as LeadField, cols),
+          note: '',
+        }))
+        .filter((c) => c.name || c.phone || c.email || c.designation);
 
       return {
+        designation: get('designation', cols) || undefined,
+        website: get('website', cols) || undefined,
+        city: get('city', cols) || undefined,
+        state: get('state', cols) || undefined,
+        pipeline: parsePipeline(get('pipeline', cols)) ?? undefined,
+        heat: parseHeat(get('heat', cols)) ?? undefined,
+        gst_rate: get('gst_rate', cols) || undefined,
+        gst_number: get('gst_number', cols).toUpperCase() || undefined,
+        expected_close_date: parseDate(get('expected_close_date', cols)) ?? undefined,
+        next_follow_up: parseDate(get('next_follow_up', cols)) ?? undefined,
+        boq_link: get('boq_link', cols) || undefined,
+        event_name: get('event_name', cols) || undefined,
+        extra_contacts: extra_contacts.length ? extra_contacts : undefined,
         customer_name: finalName, phone,
         email: email || undefined, car_interest: car || undefined,
         notes: notes || undefined, budget: budget || undefined,
@@ -405,6 +544,7 @@ const ImportLeads = () => {
       // Step 5: insert in chunks of 500
       setImportProgress({ done: 0, total: newLeads.length });
       let inserted = 0;
+      const skippedColumns = new Set<string>();
       for (let i = 0; i < newLeads.length; i += CHUNK) {
         const chunk = newLeads.slice(i, i + CHUNK);
         const rows = chunk.map((l, ci) => {
@@ -424,8 +564,20 @@ const ImportLeads = () => {
             phone: l.phone,
             email: l.email || null,
             industry: l.industry || 'Other',
-            pipeline: 'brand_approval',
-            stage: stageMap[l.funnel_stage || ''] || 'new_lead',
+            pipeline: l.pipeline || 'brand_approval',
+            stage: l.pipeline === 'tender_consultancy' ? 'tender_identified' : (l.pipeline && l.pipeline !== 'brand_approval' ? 'new_lead' : stageMap[l.funnel_stage || ''] || 'new_lead'),
+            website: l.website || null,
+            city: l.city || null,
+            state: l.state || null,
+            gst_number: l.gst_number || null,
+            boq_link: l.boq_link || null,
+            event_name: l.event_name || null,
+            expected_close_date: l.expected_close_date || null,
+            next_follow_up_at: l.next_follow_up ? new Date(`${l.next_follow_up}T10:00:00`).toISOString() : null,
+            proposal_gst_rate: proposalValue > 0 ? (Number(l.gst_rate) >= 0 && l.gst_rate !== undefined && l.gst_rate !== '' ? Number(l.gst_rate) : 18) : 0,
+            contact_designation: l.designation || null,
+            contacts: l.extra_contacts || [],
+            ...(l.heat ? { heat: l.heat } : {}),
             service_interest: l.car_interest ? [l.car_interest] : [],
             notes: l.notes || null,
             proposal_value: proposalValue,
@@ -466,8 +618,10 @@ const ImportLeads = () => {
           }
           return row;
         });
-        const { error } = await supabase.from('b2g_leads' as any).insert(rows as any);
-        if (error) throw error;
+        // A column the database does not have yet is dropped instead of failing the whole import.
+        const { result, skipped } = await writeManyWithFallback((body) => supabase.from('b2g_leads' as any).insert(body as any), rows);
+        if (result.error) throw result.error;
+        skipped.forEach((column) => skippedColumns.add(column));
         inserted += chunk.length;
         setImportProgress({ done: inserted, total: newLeads.length });
       }
@@ -475,14 +629,25 @@ const ImportLeads = () => {
       setFailedRecords(failures);
       setImported(true);
       const skipped = validLeads.length - newLeads.length;
-      toast({ title: `${inserted} leads imported!`, description: skipped > 0 ? `${skipped} skipped (already exist)` : undefined });
+      toast({
+        title: `${inserted} leads imported!`,
+        description: skipped > 0 ? `${skipped} skipped (already exist)` : skippedMessage(Array.from(skippedColumns)),
+      });
     } catch (err: any) {
       toast({ title: 'Import failed', description: err.message, variant: 'destructive' });
     } finally { setImporting(false); }
   };
 
-  const downloadSample = () => {
-    const blob = new Blob([SAMPLE_CSV], { type: 'text/csv' });
+  const downloadSample = (format: 'xlsx' | 'csv' = 'xlsx') => {
+    if (format === 'xlsx') {
+      const sheet = XLSX.utils.aoa_to_sheet([SAMPLE_HEADERS, ...SAMPLE_ROWS]);
+      sheet['!cols'] = SAMPLE_HEADERS.map((header) => ({ wch: Math.max(16, header.length + 2) }));
+      const book = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(book, sheet, 'Leads');
+      XLSX.writeFile(book, 'sample_leads.xlsx');
+      return;
+    }
+    const blob = new Blob(['﻿' + SAMPLE_CSV], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'sample_leads.csv'; a.click();
     URL.revokeObjectURL(url);
@@ -562,9 +727,15 @@ const ImportLeads = () => {
                 <Button variant="outline" size="sm" className="rounded-xl text-[13px]" onClick={resetFile}>Change</Button>
               </div>
             )}
-            <button onClick={downloadSample} className="flex items-center gap-1.5 text-[13px] text-primary font-medium mt-3 hover:underline underline-offset-2">
-              <Download className="h-3 w-3" /> Download sample CSV
-            </button>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+              <button onClick={() => downloadSample('xlsx')} className="flex items-center gap-1.5 text-[13px] text-primary font-medium hover:underline underline-offset-2">
+                <Download className="h-3 w-3" /> Download sample Excel
+              </button>
+              <button onClick={() => downloadSample('csv')} className="flex items-center gap-1.5 text-[13px] text-muted-foreground font-medium hover:underline underline-offset-2">
+                <Download className="h-3 w-3" /> or CSV
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">The sample has every Add-opportunity field, plus up to 2 extra contacts — fill it in and upload it as it is.</p>
           </CardContent>
         </Card>
 

@@ -54,13 +54,23 @@ const Campaigns = () => {
     if (!user) return;
     const fetchCampaigns = async () => {
       setLoading(true);
-      const run = (columns: string) => {
-        let q = supabase.from('b2g_leads' as any).select(columns).not('campaign_name', 'is', null).neq('campaign_name', '');
-        if (!isAdmin) q = q.eq('assigned_to', user.id);
-        return q;
+      // The database returns at most 1000 rows per request, so read the campaign tags page by page —
+      // otherwise only the first few campaigns (the ones with the most rows) would show up.
+      const PAGE = 1000;
+      const run = async (columns: string) => {
+        const all: any[] = [];
+        for (let from = 0; from < 200000; from += PAGE) {
+          let q = supabase.from('b2g_leads' as any).select(columns).not('campaign_name', 'is', null).neq('campaign_name', '').order('id').range(from, from + PAGE - 1);
+          if (!isAdmin) q = q.eq('assigned_to', user.id);
+          const page: any = await q;
+          if (page.error) return { error: page.error, data: null as any[] | null };
+          all.push(...(page.data ?? []));
+          if ((page.data ?? []).length < PAGE) break;
+        }
+        return { error: null, data: all };
       };
-      let result: any = await run('campaign_name, created_at, campaign_interested');
-      if (result.error) result = await run('campaign_name, created_at');
+      let result: any = await run('id, campaign_name, created_at, campaign_interested');
+      if (result.error) result = await run('id, campaign_name, created_at');
       if (result.error) {
         toast({ title: 'Failed to load campaigns', description: result.error.message, variant: 'destructive' });
         setLoading(false);
