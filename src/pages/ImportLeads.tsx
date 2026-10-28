@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -290,7 +290,8 @@ const ImportLeads = () => {
   const [mapped, setMapped] = useState(false);
   const [parsedLeads, setParsedLeads] = useState<ParsedLead[]>([]);
   const [sourcePortal, setSourcePortal] = useState<SourcePortal>('manual_entry');
-  const [subCategory, setSubCategory] = useState('');
+  const [searchParams] = useSearchParams();
+  const [subCategory, setSubCategory] = useState(searchParams.get('campaign') || '');
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
   const [imported, setImported] = useState(false);

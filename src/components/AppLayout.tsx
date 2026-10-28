@@ -6,6 +6,7 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { NotificationBell } from './NotificationBell';
 import TenderExpertAssistant from './TenderExpertAssistant';
+import GuideAuto from './GuideAuto';
 
 const AppLayout = () => {
   const { user, loading } = useAuth();
@@ -63,6 +64,7 @@ const AppLayout = () => {
           <Outlet />
         </main>
         {location.pathname !== '/assistant' && <TenderExpertAssistant />}
+        <GuideAuto />
         <BottomNav />
       </div>
     );
@@ -84,6 +86,7 @@ const AppLayout = () => {
             <Outlet />
           </main>
           {location.pathname !== '/assistant' && <TenderExpertAssistant />}
+          <GuideAuto />
         </div>
       </div>
     </SidebarProvider>

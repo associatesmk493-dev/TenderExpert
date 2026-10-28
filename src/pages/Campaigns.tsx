@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Building2, ChevronRight, Megaphone, MapPin, Phone, Search, ThumbsUp, Undo2, Users } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronRight, Download, Megaphone, MapPin, Phone, Search, ThumbsUp, Undo2, Upload, Users } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -90,6 +90,55 @@ const Campaigns = () => {
     fetchCampaigns();
   }, [user, isAdmin, selected === null]);
 
+  // Export every lead of one campaign (or of all campaigns) in the same columns the import sheet uses,
+  // so the file can be edited and imported back.
+  const [exporting, setExporting] = useState(false);
+  const exportLeads = async (campaign: string | null) => {
+    if (!user) return;
+    setExporting(true);
+    const rows: any[] = [];
+    for (let from = 0; from < 200000; from += 1000) {
+      let q = supabase.from('b2g_leads' as any).select('*').not('campaign_name', 'is', null).neq('campaign_name', '').order('created_at', { ascending: false }).range(from, from + 999);
+      if (campaign) q = q.eq('campaign_name', campaign);
+      if (!isAdmin) q = q.eq('assigned_to', user.id);
+      const { data, error } = await q;
+      if (error) {
+        setExporting(false);
+        toast({ title: 'Export failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+      rows.push(...((data as any[]) || []));
+      if ((data || []).length < 1000) break;
+    }
+    if (!rows.length) {
+      setExporting(false);
+      toast({ title: 'Nothing to export yet' });
+      return;
+    }
+    const realPhone = (value: string) => (String(value || '').startsWith('NOPHONE_') ? '' : String(value || ''));
+    const extra = (lead: any, i: number) => (Array.isArray(lead.contacts) ? lead.contacts[i] : null) || {};
+    const header = [
+      'campaign_name', 'organization_name', 'contact_person', 'designation', 'phone', 'email', 'website', 'gst_number', 'industry', 'city', 'state',
+      'pipeline', 'services', 'heat', 'proposal_value', 'gst_rate', 'expected_close_date', 'next_follow_up_date', 'boq_link', 'event_name', 'notes',
+      'contact2_name', 'contact2_designation', 'contact2_phone', 'contact2_email', 'contact3_name', 'contact3_designation', 'contact3_phone', 'contact3_email', 'campaign_status',
+    ];
+    const body = rows.map((lead) => [
+      lead.campaign_name, lead.organization_name, lead.contact_name, lead.contact_designation, realPhone(lead.phone), lead.email, lead.website, lead.gst_number, lead.industry, lead.city, lead.state,
+      lead.pipeline, Array.isArray(lead.service_interest) ? lead.service_interest.join(', ') : '', lead.heat, lead.proposal_value || '', lead.proposal_gst_rate ?? '',
+      lead.expected_close_date ? String(lead.expected_close_date).slice(0, 10) : '', lead.next_follow_up_at ? String(lead.next_follow_up_at).slice(0, 10) : '', lead.boq_link, lead.event_name, lead.notes,
+      extra(lead, 0).name, extra(lead, 0).designation, extra(lead, 0).phone, extra(lead, 0).email, extra(lead, 1).name, extra(lead, 1).designation, extra(lead, 1).phone, extra(lead, 1).email,
+      lead.campaign_interested ? 'Interested' : lead.campaign_na ? 'NA' : 'Pending',
+    ].map((value) => (value === null || value === undefined ? '' : String(value))));
+    const XLSX = await import('xlsx');
+    const sheet = XLSX.utils.aoa_to_sheet([header, ...body]);
+    sheet['!cols'] = header.map((name) => ({ wch: Math.max(16, name.length + 2) }));
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, 'Campaign leads');
+    XLSX.writeFile(book, `${(campaign || 'all-campaigns').replace(/[^\w-]+/g, '_')}.xlsx`);
+    setExporting(false);
+    toast({ title: `${rows.length} leads exported` });
+  };
+
   const loadLeads = async (reset: boolean) => {
     if (!selected || !user) return;
     setLeadLoading(true);
@@ -173,9 +222,17 @@ const Campaigns = () => {
             <div className="h-11 w-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0" style={{ backgroundColor: color }}>
               {selected.slice(0, 2).toUpperCase()}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-bold tracking-tight truncate">{selected}</h1>
               <p className="text-[14px] text-muted-foreground">Mark a lead “Interested” to move it into your Leads list.</p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button variant="outline" size="icon" disabled={exporting} onClick={() => exportLeads(selected)} title="Export this campaign" aria-label="Export this campaign">
+                <Download className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => navigate(`/import?campaign=${encodeURIComponent(selected)}`)} title="Import into this campaign" aria-label="Import into this campaign">
+                <Upload className="h-4 w-4" />
+              </Button>
             </div>
           </div>
           <div className="relative mt-4">
@@ -277,11 +334,19 @@ const Campaigns = () => {
           <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
             <Megaphone className="h-5 w-5 text-primary" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-bold text-foreground tracking-tight">Campaigns</h1>
             <p className="text-[14px] text-muted-foreground">
               {campaigns.length} campaigns · {totalLeads.toLocaleString('en-IN')} total leads
             </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="outline" size="icon" disabled={exporting} onClick={() => exportLeads(null)} title="Export all campaign leads" aria-label="Export all campaign leads">
+              <Download className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => navigate('/import')} title="Import campaign leads" aria-label="Import campaign leads">
+              <Upload className="h-4 w-4" />
+            </Button>
           </div>
         </div>
         <p className="mt-2 text-[13px] text-muted-foreground">Campaign leads stay here. Mark a lead “Interested” and it moves into the Leads list.</p>

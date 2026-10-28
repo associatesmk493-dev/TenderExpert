@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, UserCircle, MoreHorizontal, ContactRound, WalletCards, Download, ClipboardList, Megaphone, BadgeIndianRupee, TrendingUp, Landmark, ReceiptText, Settings2, UsersRound } from 'lucide-react';
+import { LayoutDashboard, Users, UserCircle, MoreHorizontal, ContactRound, WalletCards, Download, BookOpen, ClipboardList, Megaphone, BadgeIndianRupee, TrendingUp, Landmark, ReceiptText, Settings2, UsersRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
@@ -30,6 +30,7 @@ const BottomNav = () => {
     { path: '/settings', icon: Settings2, label: 'Integrations' },
     { path: '/team', icon: UsersRound, label: 'Team' },
     { path: '/profile', icon: UserCircle, label: 'Profile' },
+    { path: '/guide', icon: BookOpen, label: 'Guide' },
     { path: '/install', icon: Download, label: 'Install App' },
   ];
 
