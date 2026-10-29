@@ -461,3 +461,31 @@ body {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Refer & earn button: sparkles twinkle around the gift and the gift wiggles on hover */
+@keyframes refer-twinkle {
+  0%, 100% { opacity: 0; transform: translate(var(--sparkle-x), var(--sparkle-y)) scale(0); }
+  50% { opacity: 1; transform: translate(var(--sparkle-x), var(--sparkle-y)) scale(1); }
+}
+@keyframes refer-wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-12deg); }
+  60% { transform: rotate(10deg); }
+}
+.refer-sparkle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--sparkle-size);
+  height: var(--sparkle-size);
+  margin: calc(var(--sparkle-size) / -2) 0 0 calc(var(--sparkle-size) / -2);
+  background: #fff;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0;
+  transform: translate(var(--sparkle-x), var(--sparkle-y)) scale(0);
+}
+.group:hover .refer-sparkle { animation: refer-twinkle 700ms ease-in-out var(--sparkle-delay) infinite; }
+.group:hover .refer-gift { animation: refer-wiggle 600ms ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .refer-sparkle, .group:hover .refer-gift { animation: none; }
+}

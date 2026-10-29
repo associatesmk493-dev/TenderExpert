@@ -14,12 +14,15 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import ReferButton from '@/components/ReferButton';
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
 
   const mainItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },
@@ -123,7 +126,8 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/40 p-3">
+      <SidebarFooter className="gap-3 border-t border-border/40 p-3">
+        <ReferButton email={user?.email} name={profile?.full_name || (user?.user_metadata?.full_name as string | undefined)} expanded={!collapsed} />
         {!collapsed && (
           <p className="text-[11px] text-muted-foreground text-center px-2 flex items-center justify-center gap-1">
             Made with <Heart className="h-3 w-3" style={{ fill: 'hsl(25 95% 55%)', color: 'hsl(25 95% 55%)' }} /> by Handysolver © 2026
