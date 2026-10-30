@@ -5,6 +5,7 @@ import LeadFollowUpManager from "@/components/LeadFollowUpManager";
 import LeadQuotationTimeline from "@/components/LeadQuotationTimeline";
 import LeadCallOutcome from "@/components/LeadCallOutcome";
 import LeadContacts from "@/components/LeadContacts";
+import CompanyResearch from "@/components/CompanyResearch";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -466,6 +467,10 @@ export default function LeadDetail() {
           <LeadContacts
             contacts={lead.contacts}
             onSave={(contacts) => update({ contacts })}
+          />
+          <CompanyResearch
+            value={lead.company_research}
+            onSave={(company_research) => update({ company_research: company_research || null })}
           />
           <Card className="border-0 shadow-sm">
             <CardContent className="p-5">

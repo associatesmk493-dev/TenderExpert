@@ -7,14 +7,14 @@ import { feeTotals } from '@/components/SuccessFees';
 
 const money = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
 
-// One sheet per company: every project we handle for it, and its success-fee position.
+// One sheet per head / sub head: every project under it, and its success-fee position.
 export default function CompanySheets({ rows, stageLabel, onOpen }: { rows: any[]; stageLabel: (value?: string | null) => string; onOpen: (row: any) => void }) {
   const [openName, setOpenName] = useState<string | null>(null);
   const [show, setShow] = useState('all');
   const companies = useMemo(() => {
     const groups = new Map<string, any[]>();
     rows.forEach((row) => {
-      const name = String(row.company_name || '').trim() || 'No company set';
+      const name = String(row.company_name || '').trim() || 'No head / sub head set';
       groups.set(name, [...(groups.get(name) || []), row]);
     });
     return Array.from(groups.entries())
@@ -28,13 +28,13 @@ export default function CompanySheets({ rows, stageLabel, onOpen }: { rows: any[
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        {[['all', 'All companies'], ['collect', 'Fee to collect'], ['overdue', 'Overdue fee']].map(([value, label]) => (
+        {[['all', 'All heads'], ['collect', 'Fee to collect'], ['overdue', 'Overdue fee']].map(([value, label]) => (
           <button key={value} type="button" onClick={() => setShow(value)} className={`rounded-full px-3 py-1 text-xs font-medium ${show === value ? 'bg-primary text-primary-foreground' : 'bg-white text-muted-foreground shadow-sm'}`}>
             {label}
           </button>
         ))}
       </div>
-      {!shown.length && <div className="rounded-2xl bg-white p-10 text-center text-sm text-muted-foreground">No company matches this filter.</div>}
+      {!shown.length && <div className="rounded-2xl bg-white p-10 text-center text-sm text-muted-foreground">Nothing matches this filter.</div>}
       {shown.map(({ name, projects, totals }) => {
         const expanded = openName === name;
         return (

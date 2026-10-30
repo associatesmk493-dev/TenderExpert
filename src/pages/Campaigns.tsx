@@ -4,7 +4,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Building2, ChevronRight, Download, Megaphone, MapPin, Phone, Search, ThumbsUp, Undo2, Upload, Users } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronRight, Download, Megaphone, MapPin, Phone, Search, ThumbsUp, Trash2, Undo2, Upload, Users } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +50,9 @@ const Campaigns = () => {
   const [leadLoading, setLeadLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [busyId, setBusyId] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<{ kind: 'campaign' } | { kind: 'lead'; lead: any } | null>(null);
+  const [keepInterested, setKeepInterested] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -137,6 +141,46 @@ const Campaigns = () => {
     XLSX.writeFile(book, `${(campaign || 'all-campaigns').replace(/[^\w-]+/g, '_')}.xlsx`);
     setExporting(false);
     toast({ title: `${rows.length} leads exported` });
+  };
+
+  // Delete one lead of the campaign, or the whole campaign (in batches, so large campaigns do not time out).
+  const confirmDelete = async () => {
+    if (!deleteTarget || !user || !selected) return;
+    setDeleting(true);
+    if (deleteTarget.kind === 'lead') {
+      const { error } = await supabase.from('b2g_leads' as any).delete().eq('id', deleteTarget.lead.id);
+      setDeleting(false);
+      if (error) return toast({ title: 'Could not delete', description: error.message, variant: 'destructive' });
+      setLeads((current) => current.filter((lead) => lead.id !== deleteTarget.lead.id));
+      setDeleteTarget(null);
+      toast({ title: 'Lead deleted' });
+      return;
+    }
+    let removed = 0;
+    for (let round = 0; round < 500; round++) {
+      let pick = supabase.from('b2g_leads' as any).select('id').eq('campaign_name', selected).limit(500);
+      if (keepInterested) pick = pick.eq('campaign_interested', false);
+      if (!isAdmin) pick = pick.eq('assigned_to', user.id);
+      const { data: batch, error: pickError } = await pick;
+      if (pickError) {
+        setDeleting(false);
+        return toast({ title: 'Could not delete the campaign', description: pickError.message, variant: 'destructive' });
+      }
+      const ids = ((batch as any[]) || []).map((row) => row.id);
+      if (!ids.length) break;
+      const { error } = await supabase.from('b2g_leads' as any).delete().in('id', ids);
+      if (error) {
+        setDeleting(false);
+        return toast({ title: `Stopped after ${removed} leads`, description: error.message, variant: 'destructive' });
+      }
+      removed += ids.length;
+      if (ids.length < 500) break;
+    }
+    setDeleting(false);
+    setDeleteTarget(null);
+    toast({ title: `${removed} lead${removed === 1 ? '' : 's'} deleted`, description: keepInterested ? 'Leads marked Interested were kept.' : undefined });
+    setLeads([]);
+    setParams({});
   };
 
   const loadLeads = async (reset: boolean) => {
@@ -233,6 +277,9 @@ const Campaigns = () => {
               <Button variant="outline" size="icon" onClick={() => navigate(`/import?campaign=${encodeURIComponent(selected)}`)} title="Import into this campaign" aria-label="Import into this campaign">
                 <Upload className="h-4 w-4" />
               </Button>
+              <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" onClick={() => { setKeepInterested(true); setDeleteTarget({ kind: 'campaign' }); }} title="Delete this campaign" aria-label="Delete this campaign">
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
           </div>
           <div className="relative mt-4">
@@ -264,6 +311,9 @@ const Campaigns = () => {
                   </div>
                   {lead.campaign_interested && <Badge className="shrink-0 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">In Leads</Badge>}
                   {lead.campaign_na && <Badge variant="secondary" className="shrink-0">NA</Badge>}
+                  <Button size="icon" variant="ghost" className="-mr-1 -mt-1 h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget({ kind: 'lead', lead })} title="Delete this lead" aria-label={`Delete ${lead.organization_name}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                   {lead.phone && (
@@ -323,6 +373,40 @@ const Campaigns = () => {
             </Button>
           </div>
         )}
+
+        <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && !deleting && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{deleteTarget?.kind === 'lead' ? 'Delete this lead?' : `Delete campaign “${selected}”?`}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteTarget?.kind === 'lead'
+                  ? `${deleteTarget.lead.organization_name} will be deleted permanently, with its notes and follow-ups. This cannot be undone.`
+                  : 'All leads in this campaign will be deleted permanently, with their notes and follow-ups. This cannot be undone.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {deleteTarget?.kind === 'campaign' && (
+              <label className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm">
+                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={keepInterested} onChange={(e) => setKeepInterested(e.target.checked)} />
+                <span>
+                  Keep the leads already marked <b>Interested</b> (they are in your Leads list)
+                </span>
+              </label>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleting}
+                onClick={(event) => {
+                  event.preventDefault();
+                  confirmDelete();
+                }}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   }

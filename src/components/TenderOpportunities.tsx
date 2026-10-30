@@ -37,6 +37,8 @@ const STAGES = [
   { value: 'awarded', label: 'Awarded to contractor' },
   { value: 'under_process', label: 'Under process' },
   { value: 'payment_received', label: 'Payment received by company' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'project_over', label: 'Project over' },
 ];
 const stageLabel = (value?: string | null) => STAGES.find((stage) => stage.value === value)?.label || nice(value);
 const DOC_NAMES = ['BOQ', 'AR', 'Quote', 'PO', 'Approval'];
@@ -354,7 +356,7 @@ export default function TenderOpportunities() {
       <div className="mb-4 inline-flex rounded-xl bg-white p-1 shadow-sm">
         {(['projects', 'companies', 'parties'] as const).map((value) => (
           <button key={value} type="button" onClick={() => { setView(value); if (value !== 'parties') setPartyFocus(''); }} className={`rounded-lg px-4 py-1.5 text-sm font-medium ${view === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>
-            {value === 'projects' ? 'Projects' : value === 'companies' ? 'By company' : 'Parties'}
+            {value === 'projects' ? 'Projects' : value === 'companies' ? 'By head' : 'Parties'}
           </button>
         ))}
       </div>
@@ -472,8 +474,8 @@ export default function TenderOpportunities() {
               <Label text="Division"><Input value={form.division} onChange={(e) => set('division', e.target.value)} /></Label>
               <Label text="Scope of work"><Input value={form.tender_title} onChange={(e) => set('tender_title', e.target.value)} placeholder="e.g. STP plant 50 KLD" /></Label>
               <Label text="Plant capacity"><Input value={form.plant_capacity} onChange={(e) => set('plant_capacity', e.target.value)} placeholder="e.g. 135 KLD" /></Label>
-              <Label text="Company we work for (manufacturer)">
-                <Input list="tender-companies" value={form.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="e.g. TMVT" />
+              <Label text="Head / Sub head">
+                <Input list="tender-companies" value={form.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="e.g. Civil / Water works" />
                 <datalist id="tender-companies">{Array.from(new Set(rows.map((row) => String(row.company_name || '').trim()).filter(Boolean))).map((name) => <option key={name} value={name} />)}</datalist>
               </Label>
               <Label text="Contact no"><Input type="tel" value={form.contact_no} onChange={(e) => set('contact_no', e.target.value)} /></Label>
