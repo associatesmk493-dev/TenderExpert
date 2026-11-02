@@ -66,6 +66,15 @@ export const fromCampaign = (lead: { campaign_name?: string | null; campaign_int
 
 export const CLOSED_STAGES =['closed', 'completed', 'final_payment_received'];
 
+// "New" = just came in, not yet worked on. "Qualified" = any open lead that has moved past that first stage.
+export const NEW_STAGES = ['new_lead', 'tender_identified'];
+export const QUALIFIED_STAGE: Record<string, string> = {
+  brand_approval: 'qualified_lead',
+  government_business_development: 'business_assessment',
+  tender_consultancy: 'client_discussion',
+};
+export const isNewLead = (lead: { stage?: string }) => NEW_STAGES.includes(lead.stage || '');
+
 // A lead is "lost" when a lost reason is recorded; "closed" when it finished normally.
 export const leadState = (lead: { lost_reason_code?: string | null; closed_at?: string | null; stage?: string }) =>
   lead.lost_reason_code ? 'lost' : lead.closed_at || CLOSED_STAGES.includes(lead.stage || '') ? 'closed' : 'active';

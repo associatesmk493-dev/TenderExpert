@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useEffect, useState } from 'react';
+import { syncNextFollowUp } from '@/lib/followUps';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -83,6 +84,7 @@ export default function TaskEditDialog({
       toast({ title: 'Task not updated', description: error.message, variant: 'destructive' });
       return;
     }
+    await Promise.all([syncNextFollowUp(task.lead_id), syncNextFollowUp(form.lead_id && form.lead_id !== 'none' ? form.lead_id : null)]);
     toast({ title: 'Task updated' });
     onSaved();
     onClose();

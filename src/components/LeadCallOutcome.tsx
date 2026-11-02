@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useEffect, useState } from "react";
+import { syncNextFollowUp } from "@/lib/followUps";
 import {
   Ban,
   CalendarCheck,
@@ -136,6 +137,7 @@ export default function LeadCallOutcome({
       });
     }
     await update(patch);
+    if (selected.next !== "close") await syncNextFollowUp(lead.id);
     setSaving(false);
     setSelected(null);
     setNote("");

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps */
 import { useEffect, useState } from "react";
+import { syncNextFollowUp } from "@/lib/followUps";
 import {
   CalendarClock,
   CheckCircle2,
@@ -103,10 +104,7 @@ export default function LeadFollowUpManager({
         description: error.message,
         variant: "destructive",
       });
-    await supabase
-      .from("b2g_leads" as any)
-      .update({ next_follow_up_at: dueAt.toISOString() })
-      .eq("id", leadId);
+    await syncNextFollowUp(leadId);
     setForm({ ...blank(), assignee: user?.id || "" });
     await load();
     onChanged?.();
@@ -125,7 +123,9 @@ export default function LeadFollowUpManager({
         description: error.message,
         variant: "destructive",
       });
+    await syncNextFollowUp(leadId);
     await load();
+    onChanged?.();
   };
   const ready =
     form.title.trim() &&

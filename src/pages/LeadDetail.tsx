@@ -429,7 +429,6 @@ export default function LeadDetail() {
               <div className="grid sm:grid-cols-2 gap-4 text-sm">
                 <Info label="Phone" value={lead.phone} />
                 <Info label="Email" value={lead.email || "—"} />
-                <Info label="GST number" value={lead.gst_number || "—"} />
                 <Info
                   label="Location"
                   value={
@@ -444,10 +443,7 @@ export default function LeadDetail() {
                       : sourceLabel(lead.source)
                   }
                 />
-                <Info
-                  label="Services"
-                  value={lead.service_interest?.join(", ") || "—"}
-                />
+                <Info label="GST number" value={lead.gst_number || "—"} />
                 <Info
                   label="Last contacted"
                   value={
@@ -456,9 +452,15 @@ export default function LeadDetail() {
                       : "—"
                   }
                 />
+                <div className="sm:col-span-2">
+                  <Info
+                    label="Services"
+                    value={lead.service_interest?.join(", ") || "—"}
+                  />
+                </div>
               </div>
               {lead.notes && (
-                <p className="mt-4 p-4 bg-slate-50 rounded-xl text-sm">
+                <p className="mt-4 p-4 bg-slate-50 rounded-xl text-sm whitespace-pre-wrap break-words">
                   {lead.notes}
                 </p>
               )}
@@ -896,9 +898,9 @@ export default function LeadDetail() {
 }
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium mt-1">{value}</p>
+      <p className="font-medium mt-1 break-words">{value}</p>
     </div>
   );
 }

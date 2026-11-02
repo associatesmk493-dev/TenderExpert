@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Building2, ChevronRight, Download, Megaphone, MapPin, Phone, Search, ThumbsUp, Trash2, Undo2, Upload, Users } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
+import { NEW_STAGES, QUALIFIED_STAGE } from '@/lib/leadOptions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -220,7 +221,8 @@ const Campaigns = () => {
   // status: 'interested' | 'na' | 'pending'
   const setStatus = async (lead: any, status: 'interested' | 'na' | 'pending') => {
     const interested = status === 'interested';
-    const patch = { campaign_interested: interested, campaign_na: status === 'na' };
+    const patch: Record<string, any> = { campaign_interested: interested, campaign_na: status === 'na' };
+    if (interested && NEW_STAGES.includes(lead.stage)) patch.stage = QUALIFIED_STAGE[lead.pipeline] || 'qualified_lead';
     setBusyId(lead.id);
     const { error } = await supabase.from('b2g_leads' as any).update(patch).eq('id', lead.id);
     setBusyId('');
