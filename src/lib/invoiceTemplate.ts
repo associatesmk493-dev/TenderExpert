@@ -21,6 +21,7 @@ export type CompanyInfo = {
   bank_branch: string;
   logo_url: string;
   qr_code_url: string;
+  signature_url: string;
   terms_conditions: string;
 };
 
@@ -40,6 +41,7 @@ export const DEFAULT_COMPANY: CompanyInfo = {
   bank_branch: 'Sector-56, Gurugram',
   logo_url: '',
   qr_code_url: '',
+  signature_url: '',
   terms_conditions: '',
 };
 
@@ -222,7 +224,9 @@ export function invoiceHtml(invoice: any, companyInput: Partial<CompanyInfo> | n
   .grow { flex: 1; min-height: 18px; }
   .sign { align-self: flex-end; width: 240px; padding-top: 6px; text-align: right; font-size: 12.5px; }
   .sign .for { font-weight: 700; }
-  .sign .space { height: 40px; }
+  .sign .space { height: 40px; display: flex; align-items: flex-end; justify-content: center; }
+  .sign .space.has-sig { height: 62px; }
+  .sign .space img { max-width: 200px; max-height: 58px; object-fit: contain; display: block; }
   .sign .sig { padding-top: 7px; border-top: 1px solid #9ca3af; color: #4b5563; text-align: center; }
   .footer { margin-top: 14px; }
   .computer { padding-bottom: 6px; text-align: center; font-size: 10px; color: #6b7280; }
@@ -268,7 +272,7 @@ export function invoiceHtml(invoice: any, companyInput: Partial<CompanyInfo> | n
     ${termsList.length ? `<div class="terms"><div class="t">Terms &amp; Conditions</div>${termsList.map((entry, index) => `<div>${termsList.length > 1 ? `${index + 1}. ` : ''}${esc(entry)}</div>`).join('')}</div>` : ''}
 
     <div class="grow"></div>
-    <div class="sign"><div class="for">for ${esc(company.company_name)}</div><div class="space"></div><div class="sig">Authorised Signatory</div></div>
+    <div class="sign"><div class="for">for ${esc(company.company_name)}</div><div class="space${company.signature_url ? ' has-sig' : ''}">${company.signature_url ? `<img src="${esc(company.signature_url)}" alt="Authorised signature">` : ''}</div><div class="sig">Authorised Signatory</div></div>
 
     <div class="footer">
       <div class="computer">This is a Computer Generated Invoice</div>

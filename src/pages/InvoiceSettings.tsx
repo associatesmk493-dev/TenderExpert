@@ -7,7 +7,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Building2, ImagePlus, QrCode, Save, Wallet } from 'lucide-react';
+import { Building2, ImagePlus, PenLine, QrCode, Save, Wallet } from 'lucide-react';
+import { skippedMessage, writeWithFallback } from '@/lib/writeWithFallback';
 
 const blank = {
   id: '',
@@ -27,6 +28,7 @@ const blank = {
   ifsc_code: '',
   terms_conditions: '',
   qr_code_url: '',
+  signature_url: '',
 };
 
 export default function InvoiceSettings() {
@@ -34,7 +36,7 @@ export default function InvoiceSettings() {
   const [form, setForm] = useState<any>(blank);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState<'logo' | 'qr' | ''>('');
+  const [uploading, setUploading] = useState<'logo' | 'qr' | 'signature' | ''>('');
 
   const load = async () => {
     setLoading(true);
@@ -51,7 +53,7 @@ export default function InvoiceSettings() {
 
   const set = (key: string, value: string) => setForm((prev: any) => ({ ...prev, [key]: value }));
 
-  const upload = async (file: File, kind: 'logo' | 'qr') => {
+  const upload = async (file: File, kind: 'logo' | 'qr' | 'signature') => {
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
       toast({ title: 'File too large', description: 'Max 2MB allowed', variant: 'destructive' });
@@ -68,7 +70,7 @@ export default function InvoiceSettings() {
     }
     const { data: { publicUrl } } = supabase.storage.from('invoice-assets').getPublicUrl(path);
     const url = `${publicUrl}?t=${Date.now()}`;
-    set(kind === 'logo' ? 'logo_url' : 'qr_code_url', url);
+    set(kind === 'logo' ? 'logo_url' : kind === 'signature' ? 'signature_url' : 'qr_code_url', url);
     setUploading('');
   };
 
@@ -79,16 +81,20 @@ export default function InvoiceSettings() {
     }
     setSaving(true);
     const payload = { ...form, updated_at: new Date().toISOString() };
-    const result = form.id
-      ? await supabase.from('invoice_company_settings' as any).update(payload).eq('id', form.id).select('*').single()
-      : await supabase.from('invoice_company_settings' as any).insert(payload).select('*').single();
+    const { result, skipped } = await writeWithFallback(
+      (body) =>
+        form.id
+          ? supabase.from('invoice_company_settings' as any).update(body).eq('id', form.id).select('*').single()
+          : supabase.from('invoice_company_settings' as any).insert(body).select('*').single(),
+      payload,
+    );
     setSaving(false);
     if (result.error) {
       toast({ title: 'Settings could not be saved', description: result.error.message, variant: 'destructive' });
       return;
     }
     setForm({ ...blank, ...(result.data as any) });
-    toast({ title: 'Invoice settings saved' });
+    toast({ title: 'Invoice settings saved', description: skippedMessage(skipped) });
   };
 
   if (loading) return <div className="min-h-full bg-slate-50/60 p-4 md:p-7"><div className="max-w-3xl mx-auto space-y-4">{[1, 2, 3].map(x => <div key={x} className="h-48 rounded-2xl bg-white animate-pulse" />)}</div></div>;
@@ -126,9 +132,10 @@ export default function InvoiceSettings() {
 
       <Card className="border-0 shadow-sm mt-5"><CardContent className="p-5 md:p-6">
         <h2 className="font-bold flex items-center gap-2 mb-5"><ImagePlus className="h-4 w-4 text-primary" />Branding</h2>
-        <div className="grid md:grid-cols-2 gap-5">
+        <div className="grid md:grid-cols-3 gap-5">
           <UploadField label="Company logo" preview={form.logo_url} icon={ImagePlus} uploading={uploading === 'logo'} onFile={file => upload(file, 'logo')} />
           <UploadField label="Payment QR code" preview={form.qr_code_url} icon={QrCode} uploading={uploading === 'qr'} onFile={file => upload(file, 'qr')} />
+          <UploadField label="Authorised signature (shown at the bottom right)" preview={form.signature_url} icon={PenLine} uploading={uploading === 'signature'} onFile={file => upload(file, 'signature')} />
         </div>
       </CardContent></Card>
 
