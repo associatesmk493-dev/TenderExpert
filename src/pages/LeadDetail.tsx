@@ -6,6 +6,7 @@ import LeadQuotationTimeline from "@/components/LeadQuotationTimeline";
 import LeadCallOutcome from "@/components/LeadCallOutcome";
 import LeadContacts from "@/components/LeadContacts";
 import CompanyResearch from "@/components/CompanyResearch";
+import LeadClosure, { LeadPhases } from "@/components/LeadClosure";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -279,6 +280,7 @@ export default function LeadDetail() {
           )}
         </div>
       )}
+      <LeadPhases lead={lead} />
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
         <div className="flex gap-3">
           <div className="h-12 w-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
@@ -423,6 +425,9 @@ export default function LeadDetail() {
               </div>
             </CardContent>
           </Card>
+          {state === "closed" && (
+            <LeadClosure lead={lead} onSave={(patch) => update(patch)} />
+          )}
           <Card className="border-0 shadow-sm">
             <CardContent className="p-5">
               <h2 className="font-bold mb-4">Customer intelligence</h2>
