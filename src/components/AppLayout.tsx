@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import BottomNav from './BottomNav';
@@ -12,6 +13,13 @@ const AppLayout = () => {
   const { user, loading } = useAuth();
   const isMobile = useIsMobile();
   const location = useLocation();
+  // The AI assistant announces successful writes; remount the routed page so it refetches fresh data.
+  const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => {
+    const bump = () => { if (window.location.pathname !== '/assistant') setDataVersion((v) => v + 1); };
+    window.addEventListener('ai-assistant:data-changed', bump);
+    return () => window.removeEventListener('ai-assistant:data-changed', bump);
+  }, []);
 
   if (loading) {
     return (
@@ -61,7 +69,7 @@ const AppLayout = () => {
           className="min-w-0 w-full"
           style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }}
         >
-          <Outlet />
+          <Outlet key={dataVersion} />
         </main>
         {location.pathname !== '/assistant' && <TenderExpertAssistant />}
         <GuideAuto />
@@ -83,7 +91,7 @@ const AppLayout = () => {
             </div>
           </header>
           <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto">
-            <Outlet />
+            <Outlet key={dataVersion} />
           </main>
           {location.pathname !== '/assistant' && <TenderExpertAssistant />}
           <GuideAuto />
