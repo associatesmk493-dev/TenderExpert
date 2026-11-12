@@ -72,6 +72,7 @@ export const QUALIFIED_STAGE: Record<string, string> = {
   brand_approval: 'qualified_lead',
   government_business_development: 'business_assessment',
   tender_consultancy: 'client_discussion',
+  collaboration: 'qualified_lead',
 };
 export const isNewLead = (lead: { stage?: string }) => NEW_STAGES.includes(lead.stage || '');
 

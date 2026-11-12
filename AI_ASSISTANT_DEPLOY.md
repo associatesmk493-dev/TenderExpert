@@ -37,3 +37,10 @@ on conflict (provider) do update set config = integration_settings.config || exc
 - "Send" is not possible: `mark_proposal_sent` only sets status in the CRM (after confirmation) and does not email the client.
 - Stage changes, closing, reassigning leads are intentionally unsupported by the assistant.
 - Chat content is stored in `ai_messages` (owner-only). Logs contain no message text.
+
+## Monthly spend cap
+Run `supabase/migrations/20261106100000_ai_monthly_budget.sql` too. The assistant then refuses requests once team-wide
+token usage this month costs `AI_MONTHLY_BUDGET_USD` (default **5**). Cost = tokens x `AI_PRICE_INPUT_PER_MTOK` (default 2)
+and `AI_PRICE_OUTPUT_PER_MTOK` (default 8), which are USD per million tokens. The defaults are my assumption for
+`gpt-4.1`: check OpenAI's pricing page and set them for the model you use. If the migration is not applied the check is skipped (logged as a warning).
+Also set a spending limit in OpenAI billing as the hard backstop.

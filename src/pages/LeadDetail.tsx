@@ -5,6 +5,8 @@ import LeadFollowUpManager from "@/components/LeadFollowUpManager";
 import LeadQuotationTimeline from "@/components/LeadQuotationTimeline";
 import LeadCallOutcome from "@/components/LeadCallOutcome";
 import LeadContacts from "@/components/LeadContacts";
+import LeadDepartments from "@/components/LeadDepartments";
+import { useAuth } from "@/contexts/AuthContext";
 import CompanyResearch from "@/components/CompanyResearch";
 import LeadClosure, { LeadPhases } from "@/components/LeadClosure";
 import { useEffect, useState } from "react";
@@ -106,6 +108,17 @@ const stages: Record<string, string[]> = {
     "order_received",
     "completed",
   ],
+  collaboration: [
+    "new_lead",
+    "qualified_lead",
+    "partner_discussion",
+    "terms_proposed",
+    "proposal_submitted",
+    "negotiation",
+    "agreement_signed",
+    "collaboration_active",
+    "completed",
+  ],
 };
 const title = (x: string) =>
   x
@@ -122,6 +135,7 @@ export default function LeadDetail() {
   const { id } = useParams(),
     nav = useNavigate(),
     { toast } = useToast();
+  const { profile, user } = useAuth();
   const [lead, setLead] = useState<any>(null),
     [acts, setActs] = useState<any[]>([]),
     [meetings, setMeetings] = useState<any[]>([]),
@@ -474,6 +488,11 @@ export default function LeadDetail() {
           <LeadContacts
             contacts={lead.contacts}
             onSave={(contacts) => update({ contacts })}
+          />
+          <LeadDepartments
+            departments={lead.departments}
+            author={profile?.full_name || user?.email || ""}
+            onSave={(departments) => update({ departments })}
           />
           <CompanyResearch
             value={lead.company_research}

@@ -32,6 +32,11 @@ export function clientFor(world: FakeWorld, userId: string) {
   };
 
   return {
+    async rpc(name: string) {
+      if (name !== "ai_month_usage") return { data: null, error: { message: "unknown function" } };
+      const rows = world.tables.ai_usage_log;
+      return { data: [{ input_tokens: rows.reduce((s, r) => s + (r.input_tokens ?? 0), 0), output_tokens: rows.reduce((s, r) => s + (r.output_tokens ?? 0), 0) }], error: null };
+    },
     from(table: string) {
       type Op = (r: any) => boolean;
       const preds: Op[] = [];

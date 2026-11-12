@@ -28,6 +28,7 @@ const pipelines = [
   ["brand_approval", "Brand Approval / Product Approval"],
   ["government_business_development", "Government Business Development"],
   ["tender_consultancy", "Tender Consultancy"],
+  ["collaboration", "Collaboration"],
 ] as const;
 
 const empty = {

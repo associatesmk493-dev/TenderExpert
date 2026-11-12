@@ -258,4 +258,15 @@ describe("handleChat (mocked OpenAI)", () => {
     const limited = await handleChat({ db: clientFor(world, A), userId: A, env: env({ AI_RATE_LIMIT_PER_HOUR: "1" }), fetchImpl: vi.fn() as any, now: () => new Date(NOW) }, { request_id: "r9", message: "hi" });
     expect(limited.status).toBe(429);
   });
+
+  it("blocks requests once the monthly budget is used up", async () => {
+    world.tables.ai_usage_log.push({ id: newId(), user_id: B, input_tokens: 1_000_000, output_tokens: 500_000 }); // $2 + $4 = $6
+    const f = vi.fn();
+    const res = await handleChat({ db: clientFor(world, A), userId: A, env: env(), fetchImpl: f as any, now: () => new Date(NOW) }, { request_id: "rb", message: "hi" });
+    expect(res.status).toBe(429);
+    expect(res.body.code).toBe("BUDGET_EXCEEDED");
+    expect(f).not.toHaveBeenCalled();
+    const ok = await handleChat({ db: clientFor(world, A), userId: A, env: env({ AI_MONTHLY_BUDGET_USD: "50" }), fetchImpl: vi.fn(async () => reply([msg("fine")]) as any), now: () => new Date(NOW) }, { request_id: "rb2", message: "hi" });
+    expect(ok.status).toBe(200);
+  });
 });

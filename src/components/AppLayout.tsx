@@ -6,6 +6,7 @@ import { AppSidebar } from './AppSidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { NotificationBell } from './NotificationBell';
+import HardRefreshButton from './HardRefreshButton';
 import TenderExpertAssistant from './TenderExpertAssistant';
 import GuideAuto from './GuideAuto';
 
@@ -63,7 +64,10 @@ const AppLayout = () => {
               </p>
             </div>
           </div>
-          <NotificationBell iconClassName="text-foreground/80" />
+          <div className="flex items-center gap-1">
+            <HardRefreshButton />
+            <NotificationBell iconClassName="text-foreground/80" />
+          </div>
         </header>
         <main
           className="min-w-0 w-full"
@@ -86,7 +90,8 @@ const AppLayout = () => {
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-12 flex items-center justify-between border-b border-border/40 bg-background/60 backdrop-blur sticky top-0 z-30">
             <SidebarTrigger className="ml-2" />
-            <div className="mr-3">
+            <div className="mr-3 flex items-center gap-1">
+              <HardRefreshButton />
               <NotificationBell />
             </div>
           </header>

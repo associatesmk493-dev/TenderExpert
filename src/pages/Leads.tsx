@@ -29,11 +29,12 @@ const exportCsv = (rows: any[]) => {
 };
 
 const VIEWS = [
+  ['all', 'All'],
   ['new', 'New leads'],
   ['qualified', 'Qualified leads'],
   ['lost', 'Not interested / Lost'],
   ['closed', 'Closed'],
-  ['all', 'All'],
+  ['collaboration', 'Collaboration'],
 ] as const;
 
 const money = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
@@ -96,6 +97,7 @@ export default function Leads() {
       lost: scoped.filter((x) => leadState(x) === 'lost').length,
       closed: scoped.filter((x) => leadState(x) === 'closed').length,
       all: scoped.length,
+      collaboration: scoped.filter((x) => x.pipeline === 'collaboration').length,
     }),
     [scoped],
   );
@@ -103,7 +105,9 @@ export default function Leads() {
     () =>
       view === 'all'
         ? scoped
-        : view === 'new'
+        : view === 'collaboration'
+          ? scoped.filter((x) => x.pipeline === 'collaboration')
+          : view === 'new'
           ? scoped.filter((x) => leadState(x) === 'active' && isNewLead(x))
           : view === 'qualified'
             ? scoped.filter((x) => leadState(x) === 'active' && !isNewLead(x))

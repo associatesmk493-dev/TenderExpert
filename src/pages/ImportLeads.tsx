@@ -209,6 +209,7 @@ const parsePipeline = (raw: string): string | null => {
   const v = raw.toLowerCase();
   if (!v.trim()) return null;
   if (v.includes('tender')) return 'tender_consultancy';
+  if (v.includes('collab') || v.includes('partner')) return 'collaboration';
   if (v.includes('govern') || v.includes('gov') || v.includes('business dev') || v.includes('bd')) return 'government_business_development';
   if (v.includes('brand') || v.includes('approval')) return 'brand_approval';
   return null;

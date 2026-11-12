@@ -90,6 +90,18 @@ export async function handleChat(deps: Deps, body: any): Promise<HandlerResponse
   const { data: prior } = await db.from("ai_messages").select("id,content,tool_events,created_at").eq("conversation_id", convId).eq("request_id", requestId).eq("role", "assistant").maybeSingle();
   if (prior) return { status: 200, body: { conversation_id: convId, replayed: true, message: { ...prior, role: "assistant" } } };
 
+  // ---- team-wide monthly spend cap (token usage x configured prices) ----
+  const budget = Number(env("AI_MONTHLY_BUDGET_USD") ?? "5");
+  if (Number.isFinite(budget) && budget > 0) {
+    const { data: usage, error: usageErr } = await db.rpc("ai_month_usage");
+    if (usageErr) console.warn("budget_check_unavailable", String(usageErr.message ?? usageErr).slice(0, 120)); // fail open if migration not applied
+    else {
+      const row = Array.isArray(usage) ? usage[0] : usage;
+      const spent = (Number(row?.input_tokens ?? 0) * num(env("AI_PRICE_INPUT_PER_MTOK"), 2) + Number(row?.output_tokens ?? 0) * num(env("AI_PRICE_OUTPUT_PER_MTOK"), 8)) / 1e6;
+      if (spent >= budget) return { status: 429, body: { error: "The monthly AI budget has been used up. It resets next month, or an admin can raise it.", code: "BUDGET_EXCEEDED" } };
+    }
+  }
+
   // ---- per-user rate limits ----
   const hourAgo = new Date(now.getTime() - 3600_000).toISOString(), dayAgo = new Date(now.getTime() - 86400_000).toISOString();
   const [h, d] = await Promise.all([

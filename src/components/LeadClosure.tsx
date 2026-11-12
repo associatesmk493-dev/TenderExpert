@@ -19,6 +19,7 @@ const PIPELINES = [
   { value: 'brand_approval', label: 'Brand / Product Approval' },
   { value: 'government_business_development', label: 'Government Business Development' },
   { value: 'tender_consultancy', label: 'Tender Consultancy' },
+  { value: 'collaboration', label: 'Collaboration' },
 ];
 
 // Which phase this lead is, and what comes after: the parent it continued from and any later phases.

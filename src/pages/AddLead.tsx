@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button'; import { Input } from '@/components/ui/input'; import { Textarea } from '@/components/ui/textarea'; import { Card,CardContent } from '@/components/ui/card'; import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from '@/components/ui/select'; import { useToast } from '@/hooks/use-toast'; import { ArrowLeft, Building2, IndianRupee, Sparkles, Link2, Plus, Trash2 } from 'lucide-react';
 
-const pipelines={brand_approval:{label:'Brand Approval / Product Approval',stage:'new_lead'},government_business_development:{label:'Government Business Development',stage:'new_lead'},tender_consultancy:{label:'Tender Consultancy',stage:'tender_identified'}} as const;
+const pipelines={brand_approval:{label:'Brand Approval / Product Approval',stage:'new_lead'},government_business_development:{label:'Government Business Development',stage:'new_lead'},tender_consultancy:{label:'Tender Consultancy',stage:'tender_identified'},collaboration:{label:'Collaboration',stage:'new_lead'}} as const;
 import { INDUSTRIES as industries, SERVICES as services, LEAD_SOURCES, sourceLabel } from '@/lib/leadOptions';
 import { skippedMessage, writeWithFallback } from '@/lib/writeWithFallback';
 import { RESEARCH_TEMPLATE } from '@/components/CompanyResearch';
