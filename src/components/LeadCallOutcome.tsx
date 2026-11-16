@@ -96,6 +96,10 @@ export default function LeadCallOutcome({
       toast({ title: "Choose the next call date", variant: "destructive" });
       return;
     }
+    if (selected.key === "not_interested" && note.trim().length < 3) {
+      toast({ title: "Please write why in the note", description: "A short reason is needed to mark the lead as not interested.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     const activity = await supabase.from("b2g_activities" as any).insert({
       lead_id: lead.id,
@@ -116,6 +120,7 @@ export default function LeadCallOutcome({
       patch.closed_at = lead.closed_at || new Date().toISOString();
       if (selected.key === "not_interested") {
         patch.lost_reason_code = "not_interested";
+        patch.lost_reason = note.trim();
         patch.heat = "cold";
       } else {
         patch.lost_reason_code = "other";
@@ -182,7 +187,7 @@ export default function LeadCallOutcome({
         {selected && (
           <div className="mt-4 space-y-3 rounded-xl border bg-white p-4">
             <p className="text-sm font-semibold">{selected.label}</p>
-            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional) — what was said, when to try again…" />
+            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={selected.key === "not_interested" ? "Why is the lead not interested? (required)" : "Note (optional) — what was said, when to try again…"} />
             {needsDate && (
               <div className="grid grid-cols-[1fr_auto] gap-2 sm:max-w-sm">
                 <label className="space-y-1">

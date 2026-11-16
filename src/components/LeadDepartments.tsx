@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useReasonPrompt } from '@/components/ReasonDialog';
+import { logDeletion } from '@/lib/deletionLog';
 import DeptNotes, { toDeptNotes, type DeptNote } from '@/components/DeptNotes';
 
 export type Department = { id: string; name: string; state: string; status: string; notes: DeptNote[]; updated_at: string };
@@ -39,6 +41,7 @@ export default function LeadDepartments({ departments, onSave, author }: { depar
   const [showBulk, setShowBulk] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const now = () => new Date().toISOString();
+  const { askReason, reasonDialog } = useReasonPrompt();
 
   const add = () => {
     if (!name.trim()) return;
@@ -56,14 +59,19 @@ export default function LeadDepartments({ departments, onSave, author }: { depar
     setBulk(''); setShowBulk(false);
   };
   const patch = (id: string, p: Partial<Department>) => onSave(list.map((d) => (d.id === id ? { ...d, ...p, updated_at: now() } : d)));
-  const remove = (d: Department) => {
-    if (window.confirm(`Remove "${d.name}${d.state ? ` – ${d.state}` : ''}" and its notes from this lead?`)) onSave(list.filter((x) => x.id !== d.id));
+  const remove = async (d: Department) => {
+    const label = `${d.name}${d.state ? ` – ${d.state}` : ''}`;
+    const reason = await askReason({ title: `Remove ${label}?`, description: 'Its status and notes are removed from this lead.', confirmLabel: 'Remove' });
+    if (!reason) return;
+    logDeletion('department', label, reason);
+    onSave(list.filter((x) => x.id !== d.id));
   };
 
   const approved = list.filter((d) => d.status === 'Approved').length;
 
   return (
     <Card className="border-0 shadow-sm">
+      {reasonDialog}
       <CardContent className="p-5">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div>

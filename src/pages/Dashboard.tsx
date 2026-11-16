@@ -11,6 +11,8 @@ import BookedRevenue from '@/components/BookedRevenue';
 import { inLeadsList, leadState } from '@/lib/leadOptions';
 import { SHOW_AUTOMATION } from '@/lib/features';
 import { useToast } from '@/hooks/use-toast';
+import { useReasonPrompt } from '@/components/ReasonDialog';
+import { logDeletion } from '@/lib/deletionLog';
 import { ArrowRight, BadgeIndianRupee, BrainCircuit, CalendarClock, Flame, Target, Trash2, TrendingUp, Users } from 'lucide-react';
 
 type Lead = { id:string; organization_name:string; contact_name:string; pipeline:string; stage:string; heat:string; ai_score:number; proposal_value:number; expected_revenue:number; next_follow_up_at:string|null; next_best_action:string|null; assigned_to:string|null; closed_at:string|null; lost_reason_code:string|null; campaign_name?:string|null; campaign_interested?:boolean|null };
@@ -26,6 +28,7 @@ const LEAD_COLUMNS='id,organization_name,contact_name,pipeline,stage,heat,ai_sco
 export default function Dashboard(){
   const { profile, user } = useAuth(); const navigate=useNavigate();
   const { toast } = useToast();
+  const { askReason, reasonDialog } = useReasonPrompt();
   const [selected,setSelected]=useState<Set<string>>(new Set()); const [removing,setRemoving]=useState(false);
   const [leads,setLeads]=useState<Lead[]>([]); const [payments,setPayments]=useState<Payment[]>([]); const [profiles,setProfiles]=useState<TeamProfile[]>([]); const [tasks,setTasks]=useState<FollowUpTask[]>([]); const [collections,setCollections]=useState<Collection[]>([]); const [loading,setLoading]=useState(true);
   useEffect(()=>{ (async()=>{ const [l,p,t,f,c]=await Promise.all([
@@ -45,13 +48,15 @@ export default function Dashboard(){
   // Removes only the follow-up (its pending follow-up tasks + the date on the lead). The lead itself is never deleted.
   const removeFollowUps=async(ids:string[],what:string)=>{
     if(!ids.length||removing)return;
-    if(!window.confirm(`Delete ${what}? This removes the pending follow-up task(s) and the follow-up date. The lead itself is kept.`))return;
+    const reason=await askReason({title:`Delete ${what}?`,description:'This removes the pending follow-up task(s) and the follow-up date. The lead itself is kept.',confirmLabel:'Delete'});
+    if(!reason)return;
     setRemoving(true);
     const t=await supabase.from('b2g_tasks' as any).delete().in('lead_id',ids).eq('task_type','follow_up').is('completed_at',null);
     const l=t.error?null:await supabase.from('b2g_leads' as any).update({next_follow_up_at:null}).in('id',ids);
     setRemoving(false);
     const err=t.error||l?.error;
     if(err){toast({title:'Follow-up not deleted',description:err.message,variant:'destructive'});return}
+    logDeletion('follow-up',what,reason,ids.length===1?ids[0]:null);
     const gone=new Set(ids);
     setLeads(prev=>prev.map(x=>gone.has(x.id)?{...x,next_follow_up_at:null}:x));
     setTasks(prev=>prev.filter(x=>!(x.lead_id&&gone.has(x.lead_id))));
@@ -66,6 +71,7 @@ export default function Dashboard(){
   const teamPerformance=profiles.map(p=>({name:p.full_name||'Team member',leads:leads.filter(l=>l.assigned_to===p.user_id).length,value:leads.filter(l=>l.assigned_to===p.user_id).reduce((a,l)=>a+Number(l.proposal_value),0)})).filter(p=>p.leads).sort((a,b)=>b.value-a.value);
   const cards=[{label:'Total Active Leads',value:String(stats.active),icon:Users,color:'text-blue-600',bg:'bg-blue-50'},{label:'Hot Leads',value:String(stats.hot),icon:Flame,color:'text-rose-600',bg:'bg-rose-50'},{label:"Today's Follow-ups",value:String(stats.followups),icon:CalendarClock,color:'text-violet-600',bg:'bg-violet-50'},{label:'Overdue Follow-ups',value:String(stats.overdue),icon:CalendarClock,color:'text-rose-600',bg:'bg-rose-50'},{label:'Proposal Value',value:money(stats.proposal),icon:Target,color:'text-indigo-600',bg:'bg-indigo-50'},{label:'Revenue Closed',value:money(stats.collected),icon:TrendingUp,color:'text-emerald-600',bg:'bg-emerald-50'},{label:'Outstanding Collections',value:money(stats.outstanding),icon:BadgeIndianRupee,color:'text-amber-600',bg:'bg-amber-50'}];
   return <div className="min-h-full bg-slate-50/60 p-4 md:p-7 space-y-6">
+    {reasonDialog}
     <div><div className="flex items-center gap-2 text-primary font-bold text-sm"><img src="/tenderexpert-logo-hd.png" alt="TenderExpert" className="h-8 w-8 rounded-full object-cover"/> TENDEREXPERT</div><h1 className="text-2xl md:text-3xl font-bold mt-2">{greeting}, {displayName.split(' ')[0]}</h1><p className="text-muted-foreground mt-1">Your B2G business command centre</p></div>
     {loading?<div className="grid md:grid-cols-3 gap-3">{[1,2,3,4,5,6].map(x=><div key={x} className="h-28 bg-white rounded-2xl animate-pulse"/>)}</div>:<>
       <BookedRevenue />

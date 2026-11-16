@@ -16,6 +16,8 @@ import CalcOptions, { cleanCalcOptions, netOf, toCalcOptions, type CalcOption } 
 import CompanySheets from '@/components/CompanySheets';
 import SuccessFees, { cleanFees, describeFeeChanges, feeTotals, toFees, type FeeRow } from '@/components/SuccessFees';
 import LinkOrUpload from '@/components/LinkOrUpload';
+import { useReasonPrompt } from '@/components/ReasonDialog';
+import { logDeletion } from '@/lib/deletionLog';
 import DeptNotes, { toDeptNotes, type DeptNote } from '@/components/DeptNotes';
 import PartySheets from '@/components/PartySheets';
 import TenderFeeSummary from '@/components/TenderFeeSummary';
@@ -98,6 +100,7 @@ const numberText = (value: any) => (Number(value) > 0 ? String(value) : '');
 export default function TenderOpportunities() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
+  const { askReason, reasonDialog } = useReasonPrompt();
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -284,12 +287,15 @@ export default function TenderOpportunities() {
 
   const remove = async () => {
     if (!editing) return;
-    if (!window.confirm(`Delete “${editing.site_name || editing.tender_title}”? This cannot be undone.`)) return;
+    const label = editing.site_name || editing.tender_title;
+    const reason = await askReason({ title: `Delete “${label}”?`, description: 'This cannot be undone.', confirmLabel: 'Delete' });
+    if (!reason) return;
     const { error } = await supabase.from('tender_opportunities' as any).delete().eq('id', editing.id);
     if (error) {
       toast({ title: 'Could not delete', description: error.message, variant: 'destructive' });
       return;
     }
+    logDeletion('tender', String(label), reason, editing.lead_id);
     toast({ title: 'Tender deleted' });
     setOpen(false);
     load();
@@ -313,6 +319,7 @@ export default function TenderOpportunities() {
 
   return (
     <div className="min-h-full bg-slate-50/60 p-4 md:p-7">
+      {reasonDialog}
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="text-xs font-bold tracking-wider text-primary">TENDER INTELLIGENCE</p>

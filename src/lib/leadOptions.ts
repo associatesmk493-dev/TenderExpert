@@ -35,6 +35,7 @@ export const INDUSTRIES = [
 
 export const SERVICES = [
   'Brand / Product Approval',
+  'Brand Addition',
   'Government Market Entry',
   'Tender Consultancy',
   'Government Business Development',

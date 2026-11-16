@@ -7,6 +7,8 @@ import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Building2, ChevronRight, Download, Megaphone, MapPin, Phone, Search, ThumbsUp, Trash2, Undo2, Upload, Users } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { logDeletion } from '@/lib/deletionLog';
 import { NEW_STAGES, QUALIFIED_STAGE } from '@/lib/leadOptions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +53,7 @@ const Campaigns = () => {
   const [leadLoading, setLeadLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [busyId, setBusyId] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'campaign' } | { kind: 'lead'; lead: any } | null>(null);
   const [keepInterested, setKeepInterested] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -146,13 +149,15 @@ const Campaigns = () => {
 
   // Delete one lead of the campaign, or the whole campaign (in batches, so large campaigns do not time out).
   const confirmDelete = async () => {
-    if (!deleteTarget || !user || !selected) return;
+    if (!deleteTarget || !user || !selected || deleteReason.trim().length < 3) return;
     setDeleting(true);
     if (deleteTarget.kind === 'lead') {
       const { error } = await supabase.from('b2g_leads' as any).delete().eq('id', deleteTarget.lead.id);
       setDeleting(false);
       if (error) return toast({ title: 'Could not delete', description: error.message, variant: 'destructive' });
+      logDeletion('lead', deleteTarget.lead.organization_name, deleteReason.trim(), deleteTarget.lead.id);
       setLeads((current) => current.filter((lead) => lead.id !== deleteTarget.lead.id));
+      setDeleteReason('');
       setDeleteTarget(null);
       toast({ title: 'Lead deleted' });
       return;
@@ -178,6 +183,8 @@ const Campaigns = () => {
       if (ids.length < 500) break;
     }
     setDeleting(false);
+    logDeletion('campaign', `${selected} (${removed} leads)`, deleteReason.trim());
+    setDeleteReason('');
     setDeleteTarget(null);
     toast({ title: `${removed} lead${removed === 1 ? '' : 's'} deleted`, description: keepInterested ? 'Leads marked Interested were kept.' : undefined });
     setLeads([]);
@@ -279,7 +286,7 @@ const Campaigns = () => {
               <Button variant="outline" size="icon" onClick={() => navigate(`/import?campaign=${encodeURIComponent(selected)}`)} title="Import into this campaign" aria-label="Import into this campaign">
                 <Upload className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" onClick={() => { setKeepInterested(true); setDeleteTarget({ kind: 'campaign' }); }} title="Delete this campaign" aria-label="Delete this campaign">
+              <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" onClick={() => { setKeepInterested(true); setDeleteReason(''); setDeleteTarget({ kind: 'campaign' }); }} title="Delete this campaign" aria-label="Delete this campaign">
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
@@ -313,7 +320,7 @@ const Campaigns = () => {
                   </div>
                   {lead.campaign_interested && <Badge className="shrink-0 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">In Leads</Badge>}
                   {lead.campaign_na && <Badge variant="secondary" className="shrink-0">NA</Badge>}
-                  <Button size="icon" variant="ghost" className="-mr-1 -mt-1 h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget({ kind: 'lead', lead })} title="Delete this lead" aria-label={`Delete ${lead.organization_name}`}>
+                  <Button size="icon" variant="ghost" className="-mr-1 -mt-1 h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => { setDeleteReason(''); setDeleteTarget({ kind: 'lead', lead }); }} title="Delete this lead" aria-label={`Delete ${lead.organization_name}`}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -386,6 +393,10 @@ const Campaigns = () => {
                   : 'All leads in this campaign will be deleted permanently, with their notes and follow-ups. This cannot be undone.'}
               </AlertDialogDescription>
             </AlertDialogHeader>
+            <label className="block text-sm font-medium">
+              Why?
+              <Textarea rows={2} className="mt-1" maxLength={500} value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} placeholder="Write a short reason…" />
+            </label>
             {deleteTarget?.kind === 'campaign' && (
               <label className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm">
                 <input type="checkbox" className="mt-0.5 h-4 w-4" checked={keepInterested} onChange={(e) => setKeepInterested(e.target.checked)} />
@@ -398,7 +409,7 @@ const Campaigns = () => {
               <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={deleting}
+                disabled={deleting || deleteReason.trim().length < 3}
                 onClick={(event) => {
                   event.preventDefault();
                   confirmDelete();

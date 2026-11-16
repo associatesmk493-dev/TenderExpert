@@ -6,6 +6,8 @@ import LeadQuotationTimeline from "@/components/LeadQuotationTimeline";
 import LeadCallOutcome from "@/components/LeadCallOutcome";
 import LeadContacts from "@/components/LeadContacts";
 import LeadDepartments from "@/components/LeadDepartments";
+import { useReasonPrompt } from "@/components/ReasonDialog";
+import { logDeletion } from "@/lib/deletionLog";
 import { useAuth } from "@/contexts/AuthContext";
 import CompanyResearch from "@/components/CompanyResearch";
 import LeadClosure, { LeadPhases } from "@/components/LeadClosure";
@@ -136,6 +138,7 @@ export default function LeadDetail() {
     nav = useNavigate(),
     { toast } = useToast();
   const { profile, user } = useAuth();
+  const { askReason, reasonDialog } = useReasonPrompt();
   const [lead, setLead] = useState<any>(null),
     [acts, setActs] = useState<any[]>([]),
     [meetings, setMeetings] = useState<any[]>([]),
@@ -215,18 +218,35 @@ export default function LeadDetail() {
     setNote("");
     load();
   };
-  const markNotInterested = () =>
-    update({
+  // Asks why, saves the reason on the lead and in its history.
+  const markNotInterested = async () => {
+    const reason = await askReason({
+      title: "Mark as not interested?",
+      description: `${lead.organization_name} moves to the Not interested list. Add a short reason.`,
+      confirmLabel: "Mark not interested",
+      destructive: false,
+    });
+    if (!reason) return;
+    await update({
       lost_reason_code: "not_interested",
+      lost_reason: reason,
       closed_at: lead.closed_at || new Date().toISOString(),
       heat: "cold",
     });
+    await supabase.from("b2g_activities" as any).insert({
+      lead_id: id,
+      activity_type: "note",
+      subject: "Not interested",
+      description: reason,
+    });
+    load();
+  };
   const reopenLead = () =>
     update({
       lost_reason_code: null,
       closed_at: CLOSED_STAGES.includes(lead.stage) ? lead.closed_at : null,
     });
-  const deleteLead = async () => {
+  const deleteLead = async (reason: string) => {
     const { error } = await supabase
       .from("b2g_leads" as any)
       .delete()
@@ -241,6 +261,7 @@ export default function LeadDetail() {
       });
       return;
     }
+    logDeletion("lead", lead.organization_name, reason, id);
     toast({ title: "Lead deleted" });
     nav("/leads");
   };
@@ -294,6 +315,7 @@ export default function LeadDetail() {
           )}
         </div>
       )}
+      {reasonDialog}
       <LeadPhases lead={lead} />
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
         <div className="flex gap-3">
@@ -366,38 +388,22 @@ export default function LeadDetail() {
               Reopen lead
             </Button>
           )}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="outline"
-                className="text-destructive"
-                aria-label="Delete lead"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this lead permanently?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  “{lead.organization_name}” and its follow-ups, notes and
-                  quotations will be removed. This cannot be undone. If the
-                  client is just not interested, use “Not interested” instead —
-                  it keeps the history.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={deleteLead}
-                >
-                  Delete lead
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <Button
+            variant="outline"
+            className="text-destructive"
+            aria-label="Delete lead"
+            onClick={async () => {
+              const reason = await askReason({
+                title: "Delete this lead permanently?",
+                description: `“${lead.organization_name}” and its follow-ups, notes and quotations will be removed. This cannot be undone. If the client is just not interested, use “Not interested” instead; it keeps the history.`,
+                confirmLabel: "Delete lead",
+              });
+              if (reason) deleteLead(reason);
+            }}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
+          </Button>
         </div>
       </div>
       <div className="grid lg:grid-cols-3 gap-5">
@@ -584,7 +590,9 @@ export default function LeadDetail() {
                     onValueChange={(v) =>
                       v === "none"
                         ? reopenLead()
-                        : update({
+                        : v === "not_interested"
+                          ? markNotInterested()
+                          : update({
                             lost_reason_code: v,
                             closed_at:
                               lead.closed_at || new Date().toISOString(),

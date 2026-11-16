@@ -15,14 +15,17 @@ const OUTCOMES = [
   { value: 'no_further', label: 'No further business' },
   { value: 'next_phase', label: 'Next phase started' },
 ];
-const PIPELINES = [
-  { value: 'brand_approval', label: 'Brand / Product Approval' },
-  { value: 'government_business_development', label: 'Government Business Development' },
-  { value: 'tender_consultancy', label: 'Tender Consultancy' },
-  { value: 'collaboration', label: 'Collaboration' },
-];
+// The business funnel: what a client can buy next. Each step opens as a new opportunity in New leads.
+const FUNNEL = [
+  { key: 'brand_approval', label: 'Brand Approval', pipeline: 'brand_approval', service: 'Brand / Product Approval' },
+  { key: 'brand_addition', label: 'Brand Addition', pipeline: 'brand_approval', service: 'Brand Addition' },
+  { key: 'business_development', label: 'Business Development', pipeline: 'government_business_development', service: 'Government Business Development' },
+  { key: 'presentation', label: 'Presentation', pipeline: 'government_business_development', service: 'Technical Presentation' },
+  { key: 'tender_consultancy', label: 'Tender Consultancy', pipeline: 'tender_consultancy', service: 'Tender Consultancy' },
+  { key: 'collaboration', label: 'Collaboration', pipeline: 'collaboration', service: null },
+] as const;
 
-// Which phase this lead is, and what comes after: the parent it continued from and any later phases.
+// Where this lead sits in the client's funnel: the step it came from and the steps that followed.
 export function LeadPhases({ lead }: { lead: any }) {
   const navigate = useNavigate();
   const [parent, setParent] = useState<any>(null);
@@ -47,16 +50,16 @@ export function LeadPhases({ lead }: { lead: any }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl bg-violet-50 px-4 py-2.5 text-sm text-violet-800">
       <GitBranch className="h-4 w-4 shrink-0" />
-      <span className="font-semibold">Phase {Number(lead.phase_no) || 1}</span>
+      <span className="font-semibold">Funnel step {Number(lead.phase_no) || 1}</span>
       {parent && (
         <button type="button" className="underline underline-offset-2" onClick={() => navigate(`/leads/${parent.id}`)}>
-          continued from Phase {parent.phase_no || 1}
+          came from step {parent.phase_no || 1}
         </button>
       )}
       {children.map((child) => (
         <button key={child.id} type="button" className="flex items-center gap-1 underline underline-offset-2" onClick={() => navigate(`/leads/${child.id}`)}>
           <ArrowRight className="h-3.5 w-3.5" />
-          Phase {child.phase_no || 2}
+          Next: step {child.phase_no || 2}
         </button>
       ))}
     </div>
@@ -68,10 +71,11 @@ export default function LeadClosure({ lead, onSave }: { lead: any; onSave: (patc
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [pipeline, setPipeline] = useState(lead.pipeline || 'brand_approval');
   const [busy, setBusy] = useState(false);
 
-  const startNextPhase = async () => {
+  const startNextStep = async (option: (typeof FUNNEL)[number]) => {
+    if (!window.confirm(`Open “${option.label}” as a new opportunity for ${lead.organization_name}?`)) return;
+    const pipeline: string = option.pipeline;
     setBusy(true);
     const phase = (Number(lead.phase_no) || 1) + 1;
     const row: Record<string, any> = {
@@ -92,7 +96,8 @@ export default function LeadClosure({ lead, onSave }: { lead: any; onSave: (patc
       stage: pipeline === 'tender_consultancy' ? 'tender_identified' : 'new_lead',
       source: lead.source,
       heat: lead.heat,
-      notes: `Phase ${phase} — continued from the earlier engagement with ${lead.organization_name}`,
+      service_interest: option.service ? [option.service] : [],
+      notes: `Next funnel step: ${option.label}, following the earlier engagement with ${lead.organization_name}`,
       parent_lead_id: lead.id,
       phase_no: phase,
       proposal_value: 0,
@@ -104,11 +109,11 @@ export default function LeadClosure({ lead, onSave }: { lead: any; onSave: (patc
     const { result, skipped } = await writeWithFallback((body) => supabase.from('b2g_leads' as any).insert(body).select('id').single(), row);
     setBusy(false);
     if (result.error) {
-      toast({ title: 'Next phase not created', description: result.error.message, variant: 'destructive' });
+      toast({ title: 'Next step not created', description: result.error.message, variant: 'destructive' });
       return;
     }
     await onSave({ closure_outcome: 'next_phase' });
-    toast({ title: `Phase ${phase} created`, description: skippedMessage(skipped) || 'It is in New leads, with the company details copied over.' });
+    toast({ title: `${option.label} opened`, description: skippedMessage(skipped) || 'It is in New leads, with the company details copied over.' });
     navigate(`/leads/${(result.data as any).id}`);
   };
 
@@ -134,17 +139,15 @@ export default function LeadClosure({ lead, onSave }: { lead: any; onSave: (patc
           </div>
         </div>
         <div className="mt-4 rounded-xl border p-3">
-          <p className="text-sm font-semibold">More business with this client?</p>
-          <p className="text-xs text-muted-foreground">Starts the next phase as a new opportunity in New leads. Company, contacts, GST and research are copied over.</p>
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-            <Select value={pipeline} onValueChange={setPipeline}>
-              <SelectTrigger className="sm:max-w-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>{PIPELINES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
-            </Select>
-            <Button type="button" disabled={busy} onClick={startNextPhase}>
-              <GitBranch className="mr-1.5 h-4 w-4" />
-              {busy ? 'Creating…' : `Start Phase ${(Number(lead.phase_no) || 1) + 1}`}
-            </Button>
+          <p className="text-sm font-semibold">What does this client need next?</p>
+          <p className="text-xs text-muted-foreground">Pick the next step in the funnel. It opens as a new opportunity in New leads, with company, contacts, GST and research copied over.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {FUNNEL.map((option) => (
+              <Button key={option.key} type="button" variant="outline" size="sm" disabled={busy} onClick={() => startNextStep(option)}>
+                <ArrowRight className="mr-1.5 h-3.5 w-3.5" />
+                {option.label}
+              </Button>
+            ))}
           </div>
         </div>
       </CardContent>
